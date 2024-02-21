@@ -4,12 +4,16 @@ mod pipeline_utils;
 mod resources;
 mod sprite;
 mod texture;
+mod texture_atlas;
 mod utils;
+
+use std::rc::Rc;
 
 use bytemuck::NoUninit;
 use camera::Camera;
 use instant::{Duration, Instant};
 use sprite::{Sprite, SpriteInstance};
+use texture_atlas::TextureAtlas;
 use wgpu::util::DeviceExt;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -22,7 +26,9 @@ pub async fn run() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    let mut state = State::new(window).await;
+    let Ok(mut state) = State::new(window).await else {
+        panic!("could not initialize state")
+    };
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { window_id, event } if window_id == state.window().id() => {
@@ -87,10 +93,11 @@ struct State {
     time: Instant,
     time_since_last_frame: Duration,
     input: Input,
+    texture_atlas: Rc<TextureAtlas>,
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
+    async fn new(window: Window) -> anyhow::Result<Self> {
         let time = Instant::now();
         let time_since_last_frame = Duration::from_millis(0);
         let size = window.inner_size();
@@ -129,6 +136,8 @@ impl State {
             .await
             .unwrap();
 
+        let texture_atlas = Rc::new(TextureAtlas::new("character.png", &device, &queue).await?);
+
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -161,7 +170,8 @@ impl State {
             contents: bytemuck::cast_slice(&instances),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
-        let Ok(sprite) = Sprite::new(&device, &queue, &config, &camera, [4, 4], 0).await else {
+        let Ok(sprite) = Sprite::new(&device, &texture_atlas, &config, &camera, [4, 4], 0).await
+        else {
             panic!("nooo");
         };
 
@@ -172,7 +182,7 @@ impl State {
             right: false,
         };
 
-        Self {
+        Ok(Self {
             window,
             surface,
             device,
@@ -188,7 +198,8 @@ impl State {
             input,
             time,
             time_since_last_frame,
-        }
+            texture_atlas,
+        })
     }
 
     pub fn window(&self) -> &Window {

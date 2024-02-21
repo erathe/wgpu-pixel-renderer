@@ -9,6 +9,7 @@ use crate::{
         create_render_pipeline,
     },
     resources::load_texture,
+    texture_atlas::TextureAtlas,
     Vertex, INDICES, VERTICES,
 };
 
@@ -42,6 +43,7 @@ impl SpriteInstance {
 }
 
 pub struct Sprite {
+    texture_atlas: std::rc::Weak<TextureAtlas>,
     pipeline: wgpu::RenderPipeline,
     sampler_bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
@@ -53,18 +55,19 @@ pub struct Sprite {
 impl Sprite {
     pub async fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        texture_atlas: &std::rc::Rc<TextureAtlas>,
         config: &wgpu::SurfaceConfiguration,
         camera: &Camera,
         texture_atlas_size: [u32; 2],
         initial_tile: u32,
     ) -> anyhow::Result<Self> {
-        let texture = load_texture("character.png", false, device, queue).await?;
         let animation = Animation::new(
             &device,
             [Vec::from([0, 1, 2, 3])],
             Duration::from_millis(200),
         );
+
+        let weak_atlas = std::rc::Rc::downgrade(&texture_atlas);
 
         let bind_group_layout =
             create_basic_sampler_bind_group_layout(device, Some("character::bg_layout"));
@@ -130,10 +133,14 @@ impl Sprite {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+        let Some(texture) = weak_atlas.upgrade() else {
+            panic!("coult not read texture");
+        };
+
         let sampler_bind_group = create_basic_sampler_bind_group(
             device,
             &bind_group_layout,
-            &texture,
+            &texture.texture,
             Some("character::sampler_bind_group"),
         );
 
@@ -150,6 +157,7 @@ impl Sprite {
         Ok(Self {
             pipeline,
             sampler_bind_group,
+            texture_atlas: weak_atlas,
             vertex_buffer,
             index_buffer,
             atlas_bind_group,
