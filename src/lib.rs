@@ -1,6 +1,7 @@
 mod animation;
 mod camera;
 mod pipeline_utils;
+mod renderer;
 mod resources;
 mod sprite;
 mod texture;
