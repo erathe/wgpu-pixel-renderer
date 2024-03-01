@@ -2,8 +2,8 @@ use crate::{resources::load_texture, texture};
 
 pub struct TextureAtlas {
     pub texture: texture::Texture,
-    width: u32,
-    height: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl TextureAtlas {
