@@ -1,13 +1,10 @@
 use bytemuck::NoUninit;
-use winit::{
-    event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
-    window::Window,
-};
+use winit::window::Window;
 
-use crate::{
+use super::{
     camera::Camera,
-    pipeline_utils::create_basic_sampler_bind_group_layout,
-    world::{DrawSprite, SpriteRenderer},
+    sprite_renderer::{DrawSprite, SpriteRenderer},
+    utils::to_linear_rgb,
 };
 
 pub struct Renderer {
@@ -55,13 +52,14 @@ impl Renderer {
             .unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .filter(|f| f.is_srgb())
-            .next()
-            .unwrap_or(surface_caps.formats[0]);
+        let surface_format = wgpu::TextureFormat::Rgba16Float;
+        // let surface_format = surface_caps
+        //     .formats
+        //     .iter()
+        //     .copied()
+        //     .filter(|f| f.is_srgb())
+        //     .next()
+        //     .unwrap_or(surface_caps.formats[0]);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -81,7 +79,7 @@ impl Renderer {
         })
     }
 
-    pub fn write_buffer<A: NoUninit>(&mut self, buffer: &wgpu::Buffer, data: A) {
+    pub(super) fn write_buffer<A: NoUninit>(&mut self, buffer: &wgpu::Buffer, data: A) {
         self.queue
             .write_buffer(buffer, 0, bytemuck::cast_slice(&[data]));
     }
@@ -98,6 +96,7 @@ impl Renderer {
         &mut self,
         sprite_renderer: &SpriteRenderer,
         camera: &Camera,
+        instances: u32,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -109,6 +108,7 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
+        let clear_color = to_linear_rgb(0x0F0F26);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Base::pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -116,9 +116,9 @@ impl Renderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
+                        r: clear_color[0] as f64,
+                        g: clear_color[1] as f64,
+                        b: clear_color[2] as f64,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -129,7 +129,7 @@ impl Renderer {
             occlusion_query_set: None,
         });
 
-        pass.draw_sprites_instanced(sprite_renderer, camera);
+        pass.draw_sprites_instanced(sprite_renderer, camera, instances);
 
         drop(pass);
 

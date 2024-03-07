@@ -31,7 +31,8 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput, ins: InstanceInput) -> VertexOutput {
 	var out: VertexOutput;
-	let world_position = input.position + ins.translation;
+	let scale_matrix = mat2x2<f32>(vec2<f32>(32.0, 0.0), vec2<f32>(0.0, 32.0));
+	let world_position = (input.position * scale_matrix) + ins.translation;
 	let world_position_homogenous = vec4(world_position, 0.0, 1.0);
 	let position = camera.view_proj * world_position_homogenous;
 	out.clip_position = position;
@@ -58,6 +59,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	let localUv = uvOffset + (in.texture_origin / atlas.size);
 	
-    return textureSample(texture, texture_sampler, localUv);
+	var sampled = textureSample(texture, texture_sampler, localUv);
+	// sampled = sampled * vec4(0.10, 0.10, 0.10, 1.0);
+    return sampled;
 }
-

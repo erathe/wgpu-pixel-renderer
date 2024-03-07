@@ -1,4 +1,4 @@
-use crate::texture;
+use super::texture;
 
 pub fn create_basic_sampler_bind_group_layout(
     device: &wgpu::Device,

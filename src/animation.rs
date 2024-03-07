@@ -1,16 +1,12 @@
 use instant::Duration;
 use wgpu::util::DeviceExt;
 
-use crate::utils::{PipelineData, UniformData};
-
 pub struct Animation<const N: usize> {
     time_since_last_frame: Duration,
     frame_duration: Duration,
     current_animation_index: usize,
     current_frame: usize,
     frames: [Vec<u32>; N],
-    uniform: UniformData<AnimationUniform>,
-    pipeline_data: PipelineData,
 }
 
 impl<const N: usize> Animation<N> {
@@ -51,36 +47,7 @@ impl<const N: usize> Animation<N> {
             current_frame: 0,
             current_animation_index: 0,
             frames,
-            uniform: UniformData::new(uniform, buffer),
-            pipeline_data: PipelineData::new(bind_group, bind_group_layout),
         }
-    }
-
-    pub fn increment_frame(&mut self, delta: Duration) -> Option<&UniformData<AnimationUniform>> {
-        self.time_since_last_frame += delta;
-        if self.time_since_last_frame >= self.frame_duration {
-            // update current frame
-            self.current_frame =
-                (self.current_frame + 1) % self.frames[self.current_animation_index].len();
-
-            // set corresponding tile index on uniform
-            self.uniform.uniform.tile_index =
-                self.frames[self.current_animation_index][self.current_frame];
-
-            self.time_since_last_frame = Duration::from_millis(0);
-
-            // return uniform so state can write it to the queue
-            return Some(&self.uniform);
-        }
-        None
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        self.pipeline_data.bind_group()
-    }
-
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        self.pipeline_data.bind_group_layout()
     }
 }
 

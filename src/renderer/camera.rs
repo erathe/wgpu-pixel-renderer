@@ -1,7 +1,7 @@
 use cgmath::Matrix4;
 use wgpu::util::DeviceExt;
 
-use crate::utils::{PipelineData, UniformData};
+use super::utils::{PipelineData, UniformData};
 
 const Z_RANGE: f32 = 100.;
 
@@ -9,6 +9,7 @@ pub struct Camera {
     height: f32,
     width: f32,
     scale: f32,
+    offset: (f32, f32),
     proj: Matrix4<f32>,
     pub uniform: UniformData<CameraUniform>,
     pub pipeline_data: PipelineData,
@@ -21,10 +22,24 @@ pub struct CameraUniform {
 }
 
 impl Camera {
-    pub fn new(device: &wgpu::Device, height: f32, width: f32, scale: f32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        height: f32,
+        width: f32,
+        scale: f32,
+        offset: (f32, f32),
+    ) -> Self {
+        let (x, y) = offset;
         let w = width / scale;
         let h = height / scale;
-        let proj = cgmath::ortho(-w / 2.0, w / 2.0, -h / 2.0, h / 2.0, -Z_RANGE, Z_RANGE);
+        let proj = cgmath::ortho(
+            (-w / 2.0) + x,
+            (w / 2.0) + x,
+            -(h / 2.0) + y,
+            (h / 2.0) + y,
+            -Z_RANGE,
+            Z_RANGE,
+        );
 
         let uniform = CameraUniform {
             view_proj: proj.into(),
@@ -70,6 +85,7 @@ impl Camera {
             proj,
             uniform: camera_uniform,
             pipeline_data,
+            offset,
         }
     }
 
@@ -77,9 +93,32 @@ impl Camera {
         self.scale += d_s;
         self.height = n_h;
         self.width = n_w;
+        let (x, y) = self.offset;
         let w = self.width / self.scale;
         let h = self.height / self.scale;
-        self.proj = cgmath::ortho(-w / 2.0, w / 2.0, -h / 2.0, h / 2.0, -Z_RANGE, Z_RANGE);
+        self.proj = cgmath::ortho(
+            (-w / 2.0) + x,
+            (w / 2.0) + x,
+            -(h / 2.0) + y,
+            (h / 2.0) + y,
+            -Z_RANGE,
+            Z_RANGE,
+        );
+        self.update_view_proj_uniform();
+    }
+
+    pub fn move_camera(&mut self, offset: (f32, f32)) {
+        self.offset = offset;
+        let (w, h) = (self.width, self.height);
+        let (x, y) = self.offset;
+        self.proj = cgmath::ortho(
+            (-w / 2.0) + x,
+            (w / 2.0) + x,
+            -(h / 2.0) + y,
+            (h / 2.0) + y,
+            -Z_RANGE,
+            Z_RANGE,
+        );
         self.update_view_proj_uniform();
     }
 

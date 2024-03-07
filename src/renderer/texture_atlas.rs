@@ -1,4 +1,4 @@
-use crate::{resources::load_texture, texture};
+use super::{resources::load_texture, texture};
 
 pub struct TextureAtlas {
     pub texture: texture::Texture,
