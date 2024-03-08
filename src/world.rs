@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use instant::{Duration, Instant};
 use winit::{
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -5,11 +7,10 @@ use winit::{
 };
 
 use crate::{
-    constants::{
-        parse_map, Position, Size, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE,
-    },
-    renderer::{Camera, Renderer, SpriteRenderer},
-    sprite::Sprite,
+    constants::{parse_map, Position, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE},
+    entity::Entity,
+    renderer::{Camera, Renderer, SpriteInstance, SpriteRenderer},
+    utils::Incrementor,
 };
 
 struct Input {
@@ -22,13 +23,16 @@ pub struct World {
     window: winit::window::Window,
     size: winit::dpi::PhysicalSize<u32>,
     pub renderer: Renderer,
+    id_generator: Incrementor,
     sprite_renderer: SpriteRenderer,
     camera: Camera,
     time: Instant,
     time_since_last_frame: Duration,
     frames: i32,
     acc_time: Duration,
-    pub entities: Vec<Sprite>,
+    sprite_instances: Vec<SpriteInstance>,
+    instance_map: HashMap<usize, usize>,
+    pub entities: Vec<Entity>,
     input: Input,
 }
 
@@ -39,6 +43,9 @@ impl World {
         let acc_time = Duration::from_millis(0);
         let size = window.inner_size();
         let renderer = Renderer::new(&window).await?;
+        let sprite_instances =
+            Vec::with_capacity(std::mem::size_of::<SpriteInstance>() * 1_000_000);
+        let instance_map = HashMap::new();
         let entities = Vec::new();
         let sprite_renderer =
             SpriteRenderer::new(&renderer.device, &renderer.config, &renderer.queue).await?;
@@ -47,11 +54,15 @@ impl World {
             size.height as f32,
             size.width as f32,
             1.0,
-            (428., 100.),
+            (0., 0.),
         );
+        let id_generator = Incrementor::new();
         Ok(Self {
             renderer,
             sprite_renderer,
+            sprite_instances,
+            instance_map,
+            id_generator,
             size,
             window,
             camera,
@@ -92,7 +103,7 @@ impl World {
         self.renderer.render(
             &self.sprite_renderer,
             &self.camera,
-            self.entities.len() as u32,
+            self.sprite_instances.len() as u32,
         )?;
         Ok(())
     }
@@ -104,6 +115,7 @@ impl World {
         self.frames += 1;
         self.acc_time += self.time_since_last_frame;
         if self.acc_time >= Duration::from_millis(1000) {
+            println!("entities: {}", self.entities.len());
             println!("FPS: {}", self.frames);
             self.acc_time = Duration::from_millis(0);
             self.frames = 0;
@@ -119,10 +131,25 @@ impl World {
             );
         };
 
+        // let mut rng = rand::thread_rng();
+        // let mut rng_y = rand::thread_rng();
+        // for _ in 0..100 {
+        //     self.spawn_sprite(
+        //         TILES.player_walk_down_1,
+        //         Translation {
+        //             position: Position {
+        //                 x: rng.gen_range(0..=1600) as f32,
+        //                 y: rng_y.gen_range(0..=1200) as f32,
+        //             },
+        //         },
+        //         Types::PLAYER,
+        //     );
+        // }
+
         self.sprite_renderer.draw_sprites(
-            &self.entities,
-            &self.renderer.device,
-            self.entities.len() as u64,
+            &self.sprite_instances,
+            &self.renderer.queue,
+            // self.entities.len() as u64,
         );
     }
 
@@ -165,7 +192,6 @@ impl World {
                         VirtualKeyCode::S => self.input.down = false,
                         _ => {}
                     },
-                    _ => {}
                 }
                 true
             }
@@ -174,17 +200,18 @@ impl World {
     }
 
     fn spawn_sprite(&mut self, texture_origin: Position, translation: Translation, kind: Types) {
-        let idx = self.entities.len();
-        let sprite = Sprite::new(
-            idx,
-            kind,
-            Size {
-                width: SPRITE_SIZE,
-                height: SPRITE_SIZE,
-            },
-            texture_origin,
-            translation,
-        );
+        let Some(id) = self.id_generator.next() else {
+            panic!("could not generate id for entity");
+        };
+        let sprite = Entity::new(id, kind);
+        let instance_id = self.sprite_instances.len();
+        self.sprite_instances.push(SpriteInstance::new(
+            [SPRITE_SIZE, SPRITE_SIZE],
+            [texture_origin.x, texture_origin.y],
+            [translation.position.x, translation.position.y],
+        ));
+
+        self.instance_map.insert(id, instance_id);
 
         self.entities.push(sprite);
     }
@@ -218,20 +245,22 @@ impl World {
     fn move_player(&mut self) -> Option<(f32, f32)> {
         let delta_t = self.time_since_last_frame.as_millis() as f32 / 10.;
         if let Some(player) = self.entities.iter_mut().find(|e| e.kind == Types::PLAYER) {
-            if self.input.left {
-                player.translation.position.x -= 3.0 * delta_t;
-            }
-            if self.input.right {
-                player.translation.position.x += 3.0 * delta_t;
-            }
-            if self.input.up {
-                player.translation.position.y += 3.0 * delta_t;
-            }
-            if self.input.down {
-                player.translation.position.y -= 3.0 * delta_t;
-            }
+            if let Some(instance) = self.sprite_instances.get_mut(player.id) {
+                if self.input.left {
+                    instance.translation.set_delta_x(-3.0 * delta_t);
+                }
+                if self.input.right {
+                    instance.translation.set_delta_x(3.0 * delta_t);
+                }
+                if self.input.up {
+                    instance.translation.set_delta_y(3.0 * delta_t);
+                }
+                if self.input.down {
+                    instance.translation.set_delta_y(-3.0 * delta_t);
+                }
 
-            return Some((player.translation.position.x, player.translation.position.y));
+                return Some((instance.translation.x(), instance.translation.y()));
+            }
         }
 
         None

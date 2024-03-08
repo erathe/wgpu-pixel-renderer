@@ -1,7 +1,8 @@
 mod animation;
 mod constants;
+mod entity;
 mod renderer;
-mod sprite;
+mod utils;
 mod world;
 mod world_state;
 

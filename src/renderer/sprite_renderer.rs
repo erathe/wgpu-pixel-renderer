@@ -90,7 +90,7 @@ impl SpriteRenderer {
 
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
-            size: 100_000 * std::mem::size_of::<SpriteInstance>() as u64,
+            size: 1_200_000 * std::mem::size_of::<SpriteInstance>() as u64,
             usage: wgpu::BufferUsages::VERTEX
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
@@ -131,29 +131,18 @@ impl SpriteRenderer {
         })
     }
 
-    pub fn draw_sprites<T: IntoSpriteInstance>(
+    pub fn draw_sprites(
         &mut self,
-        sprites: &[T],
-        device: &wgpu::Device,
-        offset_base: u64,
+        sprites: &[SpriteInstance],
+        queue: &wgpu::Queue,
+        // offset_base: u64,
     ) {
-        let offset = std::mem::size_of::<SpriteInstance>() as u64 * offset_base;
-
-        let instances = sprites
-            .iter()
-            .map(|sprite| sprite.into_sprite_instance())
-            .collect::<Vec<SpriteInstance>>();
-
-        // queue.write_buffer(
-        //     &self.instance_buffer,
-        //     offset,
-        //     bytemuck::bytes_of(&sprite_instance),
-        // );
-        self.instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&sprites));
+        // self.instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Instance Buffer"),
+        //     contents: bytemuck::cast_slice(&sprites),
+        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        // });
     }
 }
 
@@ -165,10 +154,43 @@ struct TextureAtlasUniform {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct Wrapped2D([f32; 2]);
+
+impl Wrapped2D {
+    pub fn x(&self) -> f32 {
+        self.0[0]
+    }
+
+    pub fn width(&self) -> f32 {
+        self.0[0]
+    }
+
+    pub fn y(&self) -> f32 {
+        self.0[1]
+    }
+
+    pub fn height(&self) -> f32 {
+        self.0[1]
+    }
+
+    pub fn set_delta_x(&mut self, delta: f32) {
+        self.0[0] += delta;
+    }
+    pub fn set_delta_y(&mut self, delta: f32) {
+        self.0[1] += delta;
+    }
+
+    fn new(init: [f32; 2]) -> Self {
+        Self(init)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SpriteInstance {
-    size: [f32; 2],
-    texture_origin: [f32; 2],
-    translation: [f32; 2],
+    pub size: Wrapped2D,
+    pub texture_origin: Wrapped2D,
+    pub translation: Wrapped2D,
 }
 
 impl SpriteInstance {
@@ -184,9 +206,9 @@ impl SpriteInstance {
 
     pub fn new(size: [f32; 2], texture_origin: [f32; 2], translation: [f32; 2]) -> Self {
         Self {
-            size,
-            texture_origin,
-            translation,
+            size: Wrapped2D::new(size),
+            texture_origin: Wrapped2D::new(texture_origin),
+            translation: Wrapped2D::new(translation),
         }
     }
 
