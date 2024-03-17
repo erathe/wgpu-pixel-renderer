@@ -3,8 +3,10 @@ use winit::window::Window;
 
 use super::{
     camera::Camera,
+    occluder_texture_renderer::DrawOccluder,
     sprite_renderer::{DrawSprite, SpriteRenderer},
     utils::to_linear_rgb,
+    OccluderRenderer,
 };
 
 pub struct Renderer {
@@ -95,8 +97,10 @@ impl Renderer {
     pub fn render(
         &mut self,
         sprite_renderer: &SpriteRenderer,
+        occluder_renderer: &OccluderRenderer,
         camera: &Camera,
         instances: u32,
+        debug_occluder: bool,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -130,6 +134,9 @@ impl Renderer {
         });
 
         pass.draw_sprites_instanced(sprite_renderer, camera, instances);
+        if debug_occluder {
+            pass.draw_occluder(occluder_renderer);
+        }
 
         drop(pass);
 

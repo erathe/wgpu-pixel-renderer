@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use instant::{Duration, Instant};
+use rand::Rng;
 use winit::{
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
@@ -9,7 +10,7 @@ use winit::{
 use crate::{
     constants::{parse_map, Position, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE},
     entity::Entity,
-    renderer::{Camera, Renderer, SpriteInstance, SpriteRenderer},
+    renderer::{Camera, OccluderRenderer, Renderer, SpriteInstance, SpriteRenderer},
     utils::Incrementor,
 };
 
@@ -25,6 +26,7 @@ pub struct World {
     pub renderer: Renderer,
     id_generator: Incrementor,
     sprite_renderer: SpriteRenderer,
+    occluder_renderer: OccluderRenderer,
     camera: Camera,
     time: Instant,
     time_since_last_frame: Duration,
@@ -34,6 +36,7 @@ pub struct World {
     instance_map: HashMap<usize, usize>,
     pub entities: Vec<Entity>,
     input: Input,
+    debug_occluder: bool,
 }
 
 impl World {
@@ -56,10 +59,12 @@ impl World {
             1.0,
             (0., 0.),
         );
+        let occluder_renderer = OccluderRenderer::new(&renderer.device, &renderer.config);
         let id_generator = Incrementor::new();
         Ok(Self {
             renderer,
             sprite_renderer,
+            occluder_renderer,
             sprite_instances,
             instance_map,
             id_generator,
@@ -77,6 +82,7 @@ impl World {
                 right: false,
                 down: false,
             },
+            debug_occluder: false,
         })
     }
 
@@ -102,8 +108,10 @@ impl World {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         self.renderer.render(
             &self.sprite_renderer,
+            &self.occluder_renderer,
             &self.camera,
             self.sprite_instances.len() as u32,
+            self.debug_occluder,
         )?;
         Ok(())
     }
@@ -133,9 +141,9 @@ impl World {
 
         // let mut rng = rand::thread_rng();
         // let mut rng_y = rand::thread_rng();
-        // for _ in 0..100 {
+        // for _ in 0..1 {
         //     self.spawn_sprite(
-        //         TILES.player_walk_down_1,
+        //         TILES.player_walk_down_2,
         //         Translation {
         //             position: Position {
         //                 x: rng.gen_range(0..=1600) as f32,
@@ -183,6 +191,7 @@ impl World {
                         VirtualKeyCode::D => self.input.right = true,
                         VirtualKeyCode::W => self.input.up = true,
                         VirtualKeyCode::S => self.input.down = true,
+                        VirtualKeyCode::U => self.debug_occluder = true,
                         _ => {}
                     },
                     ElementState::Released => match key {
@@ -190,6 +199,7 @@ impl World {
                         VirtualKeyCode::A => self.input.left = false,
                         VirtualKeyCode::W => self.input.up = false,
                         VirtualKeyCode::S => self.input.down = false,
+                        VirtualKeyCode::U => self.debug_occluder = false,
                         _ => {}
                     },
                 }
@@ -217,14 +227,21 @@ impl World {
     }
 
     pub(crate) fn initialize(&mut self) {
-        let map = parse_map(MAP);
+        let (map, occluder_data, width, height) = parse_map(MAP);
+        self.occluder_renderer.set_bind_group(
+            &self.renderer.device,
+            &self.renderer.queue,
+            occluder_data,
+            width,
+            height,
+        );
         for ((x, y), tile) in map {
             self.spawn_sprite(
                 tile,
                 Translation {
                     position: Position {
-                        x: x as f32 * TILE_SIZE,
-                        y: y as f32 * TILE_SIZE,
+                        x: (x * TILE_SIZE) as f32,
+                        y: (y * TILE_SIZE) as f32,
                     },
                 },
                 Types::ENVIRONMENT,
@@ -234,8 +251,8 @@ impl World {
             TILES.player_walk_down_1,
             Translation {
                 position: Position {
-                    x: 20. as f32 * TILE_SIZE,
-                    y: 20. as f32 * TILE_SIZE,
+                    x: (20 * TILE_SIZE) as f32,
+                    y: (20 * TILE_SIZE) as f32,
                 },
             },
             Types::PLAYER,
@@ -244,25 +261,37 @@ impl World {
 
     fn move_player(&mut self) -> Option<(f32, f32)> {
         let delta_t = self.time_since_last_frame.as_millis() as f32 / 10.;
-        if let Some(player) = self.entities.iter_mut().find(|e| e.kind == Types::PLAYER) {
-            if let Some(instance) = self.sprite_instances.get_mut(player.id) {
-                if self.input.left {
-                    instance.translation.set_delta_x(-3.0 * delta_t);
-                }
-                if self.input.right {
-                    instance.translation.set_delta_x(3.0 * delta_t);
-                }
-                if self.input.up {
-                    instance.translation.set_delta_y(3.0 * delta_t);
-                }
-                if self.input.down {
-                    instance.translation.set_delta_y(-3.0 * delta_t);
-                }
+        let mut v = None;
+        self.entities
+            .iter_mut()
+            .filter(|e| e.kind == Types::PLAYER)
+            .enumerate()
+            .for_each(|(id, e)| {
+                if let Some(instance) = self.sprite_instances.get_mut(e.id) {
+                    // let mut rng = rand::thread_rng();
+                    // let t = rng.gen_range(0..=3)
+                    if self.input.left {
+                        instance.translation.set_delta_x(-3.0 * delta_t);
+                    }
+                    if self.input.right {
+                        instance.translation.set_delta_x(3.0 * delta_t);
+                    }
+                    if self.input.up {
+                        instance.translation.set_delta_y(3.0 * delta_t);
+                    }
+                    if self.input.down {
+                        instance.translation.set_delta_y(-3.0 * delta_t);
+                    }
 
-                return Some((instance.translation.x(), instance.translation.y()));
-            }
-        }
+                    if id == 0 {
+                        v = Some((instance.translation.x(), instance.translation.y()))
+                    }
+                    // return Some((instance.translation.x(), instance.translation.y()));
+                }
+            });
+        // if let Some(player) = self.entities.iter_mut().find(|e| e.kind == Types::PLAYER) {
+        //     }
 
-        None
+        return v;
     }
 }

@@ -1,5 +1,6 @@
 use anyhow::*;
 use image::GenericImageView;
+use wgpu::util::DeviceExt;
 
 #[derive(Debug)]
 pub struct Texture {
@@ -87,6 +88,54 @@ impl Texture {
             sampler,
             size,
         })
+    }
+
+    pub fn from_data(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let texture = Self::create_2d_texture(
+            device,
+            width,
+            height,
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::FilterMode::Nearest,
+            Some("sdf texture"),
+        );
+
+        let data_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("data texture buffer"),
+            contents: data,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+
+        let buffer_copy_view = wgpu::ImageCopyBuffer {
+            buffer: &data_buffer,
+            layout: wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width),
+                rows_per_image: None,
+            },
+        };
+
+        let texture_copy_view = wgpu::ImageCopyTexture {
+            texture: &texture.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        };
+
+        encoder.copy_buffer_to_texture(buffer_copy_view, texture_copy_view, texture.size);
+
+        queue.submit(Some(encoder.finish()));
+
+        texture
     }
 
     pub fn create_2d_texture(
