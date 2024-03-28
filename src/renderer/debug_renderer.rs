@@ -5,10 +5,11 @@ use super::{
         create_basic_sampler_bind_group, create_basic_sampler_bind_group_layout,
         create_render_pipeline,
     },
-    texture::Texture,
+    texture::{self, Texture},
+    Renderer,
 };
 
-pub struct OccluderRenderer {
+pub struct DebugRenderer {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -16,15 +17,15 @@ pub struct OccluderRenderer {
     texture_bind_group: Option<wgpu::BindGroup>,
 }
 
-impl OccluderRenderer {
+impl DebugRenderer {
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
         let texture_bind_group_layout =
-            create_basic_sampler_bind_group_layout(&device, Some("Occluder bg layout"));
+            create_basic_sampler_bind_group_layout(&device, Some("debug_bg layout"));
 
         let shader = include_wgsl!("occluder_shader.wgsl");
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Occluder pipeline layout"),
+            label: Some("Debug pipeline layout"),
             bind_group_layouts: &[&texture_bind_group_layout],
             push_constant_ranges: &[],
         });
@@ -36,7 +37,7 @@ impl OccluderRenderer {
             &[Vertex::desc()],
             wgpu::PrimitiveTopology::TriangleList,
             shader,
-            Some("occluder render pipeline"),
+            Some("debug render pipeline"),
         );
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -60,20 +61,12 @@ impl OccluderRenderer {
         }
     }
 
-    pub fn set_bind_group(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        occluder_data: Vec<u8>,
-        width: u32,
-        height: u32,
-    ) {
-        let texture = Texture::from_data(device, queue, &occluder_data, width, height);
+    pub fn set_bind_group(&mut self, renderer: &Renderer, texture: &texture::Texture) {
         let bind_group = create_basic_sampler_bind_group(
-            device,
+            &renderer,
             &self.texture_bind_group_layout,
             &texture,
-            Some("occluder bg"),
+            Some("debug bg"),
         );
 
         self.texture_bind_group = Some(bind_group);
@@ -102,38 +95,38 @@ impl Vertex {
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-1.0, 1.0],
-        tex_coords: [0.0, 0.0],
+        tex_coords: [0.0, 1.0],
     }, // Top-left
     Vertex {
         position: [1.0, 1.0],
-        tex_coords: [1.0, 0.0],
+        tex_coords: [1.0, 1.0],
     }, // Top-right
     Vertex {
         position: [-1.0, -1.0],
-        tex_coords: [0.0, 1.0],
+        tex_coords: [0.0, 0.0],
     }, // Bottom-left
     Vertex {
         position: [1.0, -1.0],
-        tex_coords: [1.0, 1.0],
+        tex_coords: [1.0, 0.0],
     }, // Bottom-right
 ];
 
 const INDICES: &[u16] = &[2, 1, 0u16, 2, 3, 1];
 
-pub(super) trait DrawOccluder<'a> {
-    fn draw_occluder(&mut self, occluder_renderer: &'a OccluderRenderer);
+pub(super) trait DebugTexture<'a> {
+    fn draw_debug_texture(&mut self, debug_renderer: &'a DebugRenderer);
 }
 
-impl<'a, 'b> DrawOccluder<'b> for wgpu::RenderPass<'a>
+impl<'a, 'b> DebugTexture<'b> for wgpu::RenderPass<'a>
 where
     'b: 'a,
 {
-    fn draw_occluder(&mut self, occluder_renderer: &'b OccluderRenderer) {
-        if let Some(bind_group) = &occluder_renderer.texture_bind_group {
-            self.set_pipeline(&occluder_renderer.pipeline);
-            self.set_vertex_buffer(0, occluder_renderer.vertex_buffer.slice(..));
+    fn draw_debug_texture(&mut self, debug_renderer: &'b DebugRenderer) {
+        if let Some(bind_group) = &debug_renderer.texture_bind_group {
+            self.set_pipeline(&debug_renderer.pipeline);
+            self.set_vertex_buffer(0, debug_renderer.vertex_buffer.slice(..));
             self.set_index_buffer(
-                occluder_renderer.index_buffer.slice(..),
+                debug_renderer.index_buffer.slice(..),
                 wgpu::IndexFormat::Uint16,
             );
             self.set_bind_group(0, bind_group, &[]);

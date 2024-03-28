@@ -143,7 +143,7 @@ pub const TILES: Tiles = Tiles {
     },
 };
 
-pub const TILE_SIZE: usize = 32;
+pub const TILE_SIZE: usize = 48;
 pub const SPRITE_SIZE: f32 = 16.;
 
 pub const MAP: &str = r##"
@@ -190,7 +190,7 @@ fn _get_floor_tile() -> Position {
     FLOOR_TILES[tile_num]
 }
 
-type ParsedMap = (HashMap<(usize, usize), Position>, Vec<u8>, u32, u32);
+type ParsedMap = (HashMap<(usize, usize), Position>, Vec<f32>, u32, u32);
 
 pub fn parse_map(map: &str) -> ParsedMap {
     let mut tiles = HashMap::new();
@@ -199,13 +199,13 @@ pub fn parse_map(map: &str) -> ParsedMap {
     let map_width = map_lines[0].len();
     let texture_width = map_width * TILE_SIZE;
     let texture_height = map_height * TILE_SIZE;
-    let mut sdf_data = vec![0; texture_width * texture_height];
+    let mut sdf_data = vec![0.0; texture_width * texture_height];
 
     for (y, line) in map_lines.iter().enumerate() {
         for (x, char) in line.chars().enumerate() {
             let (tile, color) = match char {
-                '#' => (determine_wall_type(x, y, &map_lines), 255),
-                _ => (_get_floor_tile(), 0),
+                '#' => (determine_wall_type(x, y, &map_lines), 0.1),
+                _ => (_get_floor_tile(), f32::MAX),
             };
             tiles.insert((x, y), tile);
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::BorrowMut, collections::HashMap};
 
 use instant::{Duration, Instant};
 use rand::Rng;
@@ -10,7 +10,10 @@ use winit::{
 use crate::{
     constants::{parse_map, Position, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE},
     entity::Entity,
-    renderer::{Camera, OccluderRenderer, Renderer, SpriteInstance, SpriteRenderer},
+    renderer::{
+        Camera, DebugRenderer, OutputRenderer, Renderer, SDFPipeline, SpriteInstance,
+        SpriteRenderer, Texture,
+    },
     utils::Incrementor,
 };
 
@@ -20,13 +23,15 @@ struct Input {
     right: bool,
     down: bool,
 }
-pub struct World {
+pub struct World<'a> {
     window: winit::window::Window,
     size: winit::dpi::PhysicalSize<u32>,
     pub renderer: Renderer,
     id_generator: Incrementor,
     sprite_renderer: SpriteRenderer,
-    occluder_renderer: OccluderRenderer,
+    debug_renderer: DebugRenderer,
+    output_renderer: OutputRenderer,
+    sdf_pipeline: SDFPipeline<'a>,
     camera: Camera,
     time: Instant,
     time_since_last_frame: Duration,
@@ -34,12 +39,15 @@ pub struct World {
     acc_time: Duration,
     sprite_instances: Vec<SpriteInstance>,
     instance_map: HashMap<usize, usize>,
+    pub map: HashMap<(usize, usize), Position>,
     pub entities: Vec<Entity>,
     input: Input,
-    debug_occluder: bool,
+    debug_texture: bool,
+    width: u32,
+    height: u32,
 }
 
-impl World {
+impl<'a> World<'a> {
     pub async fn new(window: Window) -> anyhow::Result<Self> {
         let time = Instant::now();
         let time_since_last_frame = Duration::from_millis(0);
@@ -50,8 +58,7 @@ impl World {
             Vec::with_capacity(std::mem::size_of::<SpriteInstance>() * 1_000_000);
         let instance_map = HashMap::new();
         let entities = Vec::new();
-        let sprite_renderer =
-            SpriteRenderer::new(&renderer.device, &renderer.config, &renderer.queue).await?;
+        let sprite_renderer = SpriteRenderer::new(&renderer).await?;
         let camera = Camera::new(
             &renderer.device,
             size.height as f32,
@@ -59,15 +66,30 @@ impl World {
             1.0,
             (0., 0.),
         );
-        let occluder_renderer = OccluderRenderer::new(&renderer.device, &renderer.config);
+        let (map, occluder_data, width, height) = parse_map(MAP);
+        let texture = Texture::from_data(
+            &renderer.device,
+            &renderer.queue,
+            &occluder_data,
+            width,
+            height,
+        );
+        let mut debug_renderer = DebugRenderer::new(&renderer.device, &renderer.config);
         let id_generator = Incrementor::new();
+        let sdf_pipeline = SDFPipeline::new(&renderer.device, texture);
+        debug_renderer.set_bind_group(&renderer, &sdf_pipeline.texture_a);
+
+        let output_renderer = OutputRenderer::new(&renderer, &sprite_renderer.texture);
         Ok(Self {
             renderer,
             sprite_renderer,
-            occluder_renderer,
+            debug_renderer,
+            output_renderer,
             sprite_instances,
+            sdf_pipeline,
             instance_map,
             id_generator,
+            map,
             size,
             window,
             camera,
@@ -76,13 +98,15 @@ impl World {
             time_since_last_frame,
             acc_time,
             entities,
+            width,
+            height,
             input: Input {
                 up: false,
                 left: false,
                 right: false,
                 down: false,
             },
-            debug_occluder: false,
+            debug_texture: false,
         })
     }
 
@@ -105,13 +129,25 @@ impl World {
         &self.window
     }
 
+    // TODO: move into renderer and restructure
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        self.renderer.render(
+        self.sdf_pipeline.compute_pass(
+            &self.renderer.device,
+            &self.renderer.queue,
+            self.width,
+            self.height,
+        );
+
+        self.renderer.render_sprites_to_texture(
             &self.sprite_renderer,
-            &self.occluder_renderer,
             &self.camera,
             self.sprite_instances.len() as u32,
-            self.debug_occluder,
+        )?;
+
+        self.renderer.render_to_screen(
+            &self.output_renderer,
+            &self.debug_renderer,
+            self.debug_texture,
         )?;
         Ok(())
     }
@@ -154,6 +190,8 @@ impl World {
         //     );
         // }
 
+        //currently we just generate sdf for the whole map. This is put here
+        //to support when I start generating sdfs based on what the camera sees instead
         self.sprite_renderer.draw_sprites(
             &self.sprite_instances,
             &self.renderer.queue,
@@ -191,7 +229,7 @@ impl World {
                         VirtualKeyCode::D => self.input.right = true,
                         VirtualKeyCode::W => self.input.up = true,
                         VirtualKeyCode::S => self.input.down = true,
-                        VirtualKeyCode::U => self.debug_occluder = true,
+                        VirtualKeyCode::U => self.debug_texture = true,
                         _ => {}
                     },
                     ElementState::Released => match key {
@@ -199,7 +237,7 @@ impl World {
                         VirtualKeyCode::A => self.input.left = false,
                         VirtualKeyCode::W => self.input.up = false,
                         VirtualKeyCode::S => self.input.down = false,
-                        VirtualKeyCode::U => self.debug_occluder = false,
+                        VirtualKeyCode::U => self.debug_texture = false,
                         _ => {}
                     },
                 }
@@ -209,7 +247,7 @@ impl World {
         }
     }
 
-    fn spawn_sprite(&mut self, texture_origin: Position, translation: Translation, kind: Types) {
+    fn spawn_sprite(&mut self, texture_origin: &Position, translation: Translation, kind: Types) {
         let Some(id) = self.id_generator.next() else {
             panic!("could not generate id for entity");
         };
@@ -226,18 +264,12 @@ impl World {
         self.entities.push(sprite);
     }
 
-    pub(crate) fn initialize(&mut self) {
-        let (map, occluder_data, width, height) = parse_map(MAP);
-        self.occluder_renderer.set_bind_group(
-            &self.renderer.device,
-            &self.renderer.queue,
-            occluder_data,
-            width,
-            height,
-        );
+    pub(crate) fn initialize_map(&mut self) {
+        //TODO: clean up
+        let map = self.map.clone();
         for ((x, y), tile) in map {
             self.spawn_sprite(
-                tile,
+                &tile,
                 Translation {
                     position: Position {
                         x: (x * TILE_SIZE) as f32,
@@ -248,7 +280,7 @@ impl World {
             )
         }
         self.spawn_sprite(
-            TILES.player_walk_down_1,
+            &TILES.player_walk_down_1,
             Translation {
                 position: Position {
                     x: (20 * TILE_SIZE) as f32,

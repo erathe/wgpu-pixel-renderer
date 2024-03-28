@@ -3,10 +3,11 @@ use winit::window::Window;
 
 use super::{
     camera::Camera,
-    occluder_texture_renderer::DrawOccluder,
+    debug_renderer::DebugTexture,
+    output_renderer::DrawToScreen,
     sprite_renderer::{DrawSprite, SpriteRenderer},
     utils::to_linear_rgb,
-    OccluderRenderer,
+    DebugRenderer, OutputRenderer,
 };
 
 pub struct Renderer {
@@ -14,6 +15,11 @@ pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
+    pub sampler: wgpu::Sampler,
+    // sprite node
+    // sdf node
+    // lighting node
+    // output node
 }
 
 impl Renderer {
@@ -45,7 +51,9 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::all_webgpu_mask(),
+                    features: wgpu::Features::all_webgpu_mask()
+                        | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                        | wgpu::Features::TEXTURE_BINDING_ARRAY,
                     limits: wgpu::Limits::downlevel_defaults(),
                 },
                 None,
@@ -73,11 +81,22 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         Ok(Self {
             surface,
             device,
             queue,
             config,
+            sampler,
         })
     }
 
@@ -94,13 +113,57 @@ impl Renderer {
         }
     }
 
-    pub fn render(
+    pub fn render() {
+        todo!();
+    }
+
+    pub fn render_sprites_to_texture(
         &mut self,
         sprite_renderer: &SpriteRenderer,
-        occluder_renderer: &OccluderRenderer,
         camera: &Camera,
         instances: u32,
-        debug_occluder: bool,
+    ) -> Result<(), wgpu::SurfaceError> {
+        let view = &sprite_renderer.texture.view;
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+        let clear_color = to_linear_rgb(0x0F0F26);
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Base::pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: clear_color[0] as f64,
+                        g: clear_color[1] as f64,
+                        b: clear_color[2] as f64,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        pass.draw_sprites_instanced(sprite_renderer, camera, instances);
+        drop(pass);
+
+        self.queue.submit(Some(encoder.finish()));
+
+        Ok(())
+    }
+
+    pub fn render_to_screen(
+        &mut self,
+        output_renderer: &OutputRenderer,
+        debug_renderer: &DebugRenderer,
+        show_debug_texture: bool,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -133,11 +196,10 @@ impl Renderer {
             occlusion_query_set: None,
         });
 
-        pass.draw_sprites_instanced(sprite_renderer, camera, instances);
-        if debug_occluder {
-            pass.draw_occluder(occluder_renderer);
+        pass.draw_to_screen(output_renderer);
+        if show_debug_texture {
+            pass.draw_debug_texture(debug_renderer);
         }
-
         drop(pass);
 
         self.queue.submit(Some(encoder.finish()));

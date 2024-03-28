@@ -31,7 +31,8 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput, ins: InstanceInput) -> VertexOutput {
 	var out: VertexOutput;
-	let scale_matrix = mat2x2<f32>(vec2<f32>(32.0, 0.0), vec2<f32>(0.0, 32.0));
+	// TODO: should be a uniform
+	let scale_matrix = mat2x2<f32>(vec2<f32>(48.0, 0.0), vec2<f32>(0.0, 48.0));
 	let world_position = (input.position * scale_matrix) + ins.translation;
 	let world_position_homogenous = vec4(world_position, 0.0, 1.0);
 	let position = camera.view_proj * world_position_homogenous;

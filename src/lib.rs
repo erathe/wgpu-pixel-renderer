@@ -7,6 +7,7 @@ mod world;
 mod world_state;
 
 use winit::{
+    dpi::PhysicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -16,13 +17,16 @@ use world::World;
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new()
+        .with_inner_size(PhysicalSize::new(2048, 1600))
+        .build(&event_loop)
+        .unwrap();
 
     let Ok(mut world) = World::new(window).await else {
         panic!("could not initialize world")
     };
 
-    world.initialize();
+    world.initialize_map();
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent { window_id, event } if window_id == world.window().id() => {
             if !world.input(&event) {

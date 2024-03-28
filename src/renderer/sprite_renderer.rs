@@ -7,6 +7,7 @@ use super::{
         create_render_pipeline,
     },
     texture_atlas::TextureAtlas,
+    Renderer, Texture,
 };
 
 pub struct SpriteRenderer {
@@ -16,32 +17,43 @@ pub struct SpriteRenderer {
     instance_buffer: wgpu::Buffer,
     sampler_bind_group: wgpu::BindGroup,
     texture_atlas_bind_group: wgpu::BindGroup,
+    pub texture: Texture,
 }
 
 impl SpriteRenderer {
-    pub async fn new(
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-        queue: &wgpu::Queue,
-    ) -> anyhow::Result<Self> {
+    pub async fn new(renderer: &Renderer) -> anyhow::Result<Self> {
         // Texture atlas
-        let texture_atlas = TextureAtlas::new("test_texture-sheet.png", &device, &queue).await?;
+        let device = &renderer.device;
+        let config = &renderer.config;
+        let queue = &renderer.queue;
+
+        let texture_atlas = TextureAtlas::new("test_texture-sheet.png", device, &queue).await?;
+        let texture = Texture::create_2d_texture(
+            device,
+            config.width,
+            config.height,
+            config.format,
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            Some("sprite texture"),
+        );
 
         // Layouts
         let texture_atlas_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture atlas bind group"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+            renderer
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("texture atlas bind group"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
 
         let sampler_bind_group_layout =
             &create_basic_sampler_bind_group_layout(device, Some("Sprite basic sampler bg layout"));
@@ -106,7 +118,7 @@ impl SpriteRenderer {
 
         // Bind groups
         let sampler_bind_group = create_basic_sampler_bind_group(
-            device,
+            &renderer,
             &sampler_bind_group_layout,
             &texture_atlas.texture,
             Some("sprite renderer sampler bind group"),
@@ -128,6 +140,7 @@ impl SpriteRenderer {
             instance_buffer,
             sampler_bind_group,
             texture_atlas_bind_group,
+            texture,
         })
     }
 

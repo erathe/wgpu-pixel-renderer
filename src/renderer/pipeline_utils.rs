@@ -1,4 +1,4 @@
-use super::texture;
+use super::{texture, Renderer};
 
 pub fn create_basic_sampler_bind_group_layout(
     device: &wgpu::Device,
@@ -28,25 +28,27 @@ pub fn create_basic_sampler_bind_group_layout(
 }
 
 pub fn create_basic_sampler_bind_group(
-    device: &wgpu::Device,
+    renderer: &Renderer,
     layout: &wgpu::BindGroupLayout,
     texture: &texture::Texture,
     label: Option<&str>,
 ) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label,
-        layout: &layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&texture.view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&texture.sampler),
-            },
-        ],
-    })
+    renderer
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label,
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&renderer.sampler),
+                },
+            ],
+        })
 }
 
 pub fn create_render_pipeline(

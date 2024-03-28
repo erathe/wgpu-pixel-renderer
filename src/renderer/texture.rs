@@ -6,7 +6,6 @@ use wgpu::util::DeviceExt;
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
     pub size: wgpu::Extent3d,
 }
 
@@ -72,20 +71,10 @@ impl Texture {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
 
         Ok(Self {
             texture,
             view,
-            sampler,
             size,
         })
     }
@@ -93,7 +82,7 @@ impl Texture {
     pub fn from_data(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        data: &[u8],
+        data: &[f32],
         width: u32,
         height: u32,
     ) -> Self {
@@ -101,15 +90,17 @@ impl Texture {
             device,
             width,
             height,
-            wgpu::TextureFormat::R8Unorm,
-            wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-            wgpu::FilterMode::Nearest,
+            wgpu::TextureFormat::R32Float,
+            wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::STORAGE_BINDING,
             Some("sdf texture"),
         );
 
         let data_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("data texture buffer"),
-            contents: data,
+            contents: bytemuck::cast_slice(data),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
         });
 
@@ -119,7 +110,7 @@ impl Texture {
             buffer: &data_buffer,
             layout: wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(width),
+                bytes_per_row: Some(width * 4),
                 rows_per_image: None,
             },
         };
@@ -144,7 +135,6 @@ impl Texture {
         height: u32,
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsages,
-        mag_filter: wgpu::FilterMode,
         label: Option<&str>,
     ) -> Self {
         let size = wgpu::Extent3d {
@@ -159,7 +149,6 @@ impl Texture {
             format,
             usage,
             wgpu::TextureDimension::D2,
-            mag_filter,
         )
     }
 
@@ -170,7 +159,6 @@ impl Texture {
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsages,
         dimension: wgpu::TextureDimension,
-        mag_filter: wgpu::FilterMode,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
@@ -184,20 +172,10 @@ impl Texture {
         });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
 
         Self {
             texture,
             view,
-            sampler,
             size,
         }
     }
