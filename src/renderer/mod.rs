@@ -1,19 +1,20 @@
 mod camera;
-mod debug_renderer;
-mod output_renderer;
+mod debug_node;
+mod light_node;
+mod output_node;
 mod pipeline_utils;
 mod renderer;
 mod resources;
 mod sdf;
-mod sprite_renderer;
+mod sprite_node;
 mod texture;
 mod texture_atlas;
 mod utils;
 
 pub use camera::Camera;
-pub use debug_renderer::DebugRenderer;
-pub use output_renderer::OutputRenderer;
+pub use debug_node::DebugNode;
+pub use output_node::OutputNode;
 pub use renderer::Renderer;
 pub use sdf::SDFPipeline;
-pub use sprite_renderer::{IntoSpriteInstance, SpriteInstance, SpriteRenderer};
+pub use sprite_node::{SpriteInstance, SpriteNode};
 pub use texture::Texture;

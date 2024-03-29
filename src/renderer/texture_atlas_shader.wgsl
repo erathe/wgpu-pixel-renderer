@@ -36,6 +36,7 @@ fn vs_main(input: VertexInput, ins: InstanceInput) -> VertexOutput {
 	let world_position = (input.position * scale_matrix) + ins.translation;
 	let world_position_homogenous = vec4(world_position, 0.0, 1.0);
 	let position = camera.view_proj * world_position_homogenous;
+	// let position = world_position_homogenous;
 	out.clip_position = position;
 	out.tex_coords = input.tex_coords;
 	out.size = ins.size;

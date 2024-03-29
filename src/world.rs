@@ -1,7 +1,6 @@
-use std::{borrow::BorrowMut, collections::HashMap};
+use std::collections::HashMap;
 
 use instant::{Duration, Instant};
-use rand::Rng;
 use winit::{
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
@@ -10,10 +9,7 @@ use winit::{
 use crate::{
     constants::{parse_map, Position, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE},
     entity::Entity,
-    renderer::{
-        Camera, DebugRenderer, OutputRenderer, Renderer, SDFPipeline, SpriteInstance,
-        SpriteRenderer, Texture,
-    },
+    renderer::{Camera, Renderer, SpriteInstance},
     utils::Incrementor,
 };
 
@@ -23,15 +19,11 @@ struct Input {
     right: bool,
     down: bool,
 }
-pub struct World<'a> {
+pub struct World {
     window: winit::window::Window,
     size: winit::dpi::PhysicalSize<u32>,
-    pub renderer: Renderer,
     id_generator: Incrementor,
-    sprite_renderer: SpriteRenderer,
-    debug_renderer: DebugRenderer,
-    output_renderer: OutputRenderer,
-    sdf_pipeline: SDFPipeline<'a>,
+    pub renderer: Renderer,
     camera: Camera,
     time: Instant,
     time_since_last_frame: Duration,
@@ -43,22 +35,20 @@ pub struct World<'a> {
     pub entities: Vec<Entity>,
     input: Input,
     debug_texture: bool,
-    width: u32,
-    height: u32,
 }
 
-impl<'a> World<'a> {
+impl World {
     pub async fn new(window: Window) -> anyhow::Result<Self> {
         let time = Instant::now();
         let time_since_last_frame = Duration::from_millis(0);
         let acc_time = Duration::from_millis(0);
         let size = window.inner_size();
-        let renderer = Renderer::new(&window).await?;
+        let (map, occluder_data, width, height) = parse_map(MAP);
+        let renderer = Renderer::new(&window, occluder_data, width, height).await?;
         let sprite_instances =
             Vec::with_capacity(std::mem::size_of::<SpriteInstance>() * 1_000_000);
         let instance_map = HashMap::new();
         let entities = Vec::new();
-        let sprite_renderer = SpriteRenderer::new(&renderer).await?;
         let camera = Camera::new(
             &renderer.device,
             size.height as f32,
@@ -66,40 +56,22 @@ impl<'a> World<'a> {
             1.0,
             (0., 0.),
         );
-        let (map, occluder_data, width, height) = parse_map(MAP);
-        let texture = Texture::from_data(
-            &renderer.device,
-            &renderer.queue,
-            &occluder_data,
-            width,
-            height,
-        );
-        let mut debug_renderer = DebugRenderer::new(&renderer.device, &renderer.config);
         let id_generator = Incrementor::new();
-        let sdf_pipeline = SDFPipeline::new(&renderer.device, texture);
-        debug_renderer.set_bind_group(&renderer, &sdf_pipeline.texture_a);
 
-        let output_renderer = OutputRenderer::new(&renderer, &sprite_renderer.texture);
         Ok(Self {
             renderer,
-            sprite_renderer,
-            debug_renderer,
-            output_renderer,
-            sprite_instances,
-            sdf_pipeline,
             instance_map,
             id_generator,
-            map,
             size,
+            map,
             window,
             camera,
             frames: 0,
             time,
             time_since_last_frame,
+            sprite_instances,
             acc_time,
             entities,
-            width,
-            height,
             input: Input {
                 up: false,
                 left: false,
@@ -116,6 +88,7 @@ impl<'a> World<'a> {
         }
         self.renderer.resize(self.size);
 
+        // TODO: move into renderer
         self.camera
             .update_view_projection(self.size.height as f32, self.size.width as f32, 0.);
         self.renderer.queue.write_buffer(
@@ -129,24 +102,10 @@ impl<'a> World<'a> {
         &self.window
     }
 
-    // TODO: move into renderer and restructure
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        self.sdf_pipeline.compute_pass(
-            &self.renderer.device,
-            &self.renderer.queue,
-            self.width,
-            self.height,
-        );
-
-        self.renderer.render_sprites_to_texture(
-            &self.sprite_renderer,
+        self.renderer.render(
             &self.camera,
             self.sprite_instances.len() as u32,
-        )?;
-
-        self.renderer.render_to_screen(
-            &self.output_renderer,
-            &self.debug_renderer,
             self.debug_texture,
         )?;
         Ok(())
@@ -192,9 +151,8 @@ impl<'a> World<'a> {
 
         //currently we just generate sdf for the whole map. This is put here
         //to support when I start generating sdfs based on what the camera sees instead
-        self.sprite_renderer.draw_sprites(
+        self.renderer.draw_sprites(
             &self.sprite_instances,
-            &self.renderer.queue,
             // self.entities.len() as u64,
         );
     }
@@ -202,6 +160,7 @@ impl<'a> World<'a> {
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::TouchpadMagnify { delta, .. } => {
+                //TODO: fix this
                 self.camera.update_view_projection(
                     self.size.height as f32,
                     self.size.width as f32,

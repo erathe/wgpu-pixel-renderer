@@ -28,27 +28,26 @@ pub fn create_basic_sampler_bind_group_layout(
 }
 
 pub fn create_basic_sampler_bind_group(
-    renderer: &Renderer,
+    device: &wgpu::Device,
+    sampler: &wgpu::Sampler,
     layout: &wgpu::BindGroupLayout,
     texture: &texture::Texture,
     label: Option<&str>,
 ) -> wgpu::BindGroup {
-    renderer
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label,
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&renderer.sampler),
-                },
-            ],
-        })
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label,
+        layout: &layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&texture.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    })
 }
 
 pub fn create_render_pipeline(

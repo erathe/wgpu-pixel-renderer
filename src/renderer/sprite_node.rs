@@ -7,10 +7,10 @@ use super::{
         create_render_pipeline,
     },
     texture_atlas::TextureAtlas,
-    Renderer, Texture,
+    Texture,
 };
 
-pub struct SpriteRenderer {
+pub struct SpriteNode {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -20,13 +20,14 @@ pub struct SpriteRenderer {
     pub texture: Texture,
 }
 
-impl SpriteRenderer {
-    pub async fn new(renderer: &Renderer) -> anyhow::Result<Self> {
+impl SpriteNode {
+    pub async fn new(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        queue: &wgpu::Queue,
+        sampler: &wgpu::Sampler,
+    ) -> anyhow::Result<Self> {
         // Texture atlas
-        let device = &renderer.device;
-        let config = &renderer.config;
-        let queue = &renderer.queue;
-
         let texture_atlas = TextureAtlas::new("test_texture-sheet.png", device, &queue).await?;
         let texture = Texture::create_2d_texture(
             device,
@@ -39,21 +40,19 @@ impl SpriteRenderer {
 
         // Layouts
         let texture_atlas_bind_group_layout =
-            renderer
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("texture atlas bind group"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                });
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("texture atlas bind group"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
         let sampler_bind_group_layout =
             &create_basic_sampler_bind_group_layout(device, Some("Sprite basic sampler bg layout"));
@@ -94,12 +93,6 @@ impl SpriteRenderer {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //     label: Some("Instance Buffer"),
-        //     contents: bytemuck::cast_slice(&instances),
-        //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        // });
-
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
             size: 1_200_000 * std::mem::size_of::<SpriteInstance>() as u64,
@@ -118,7 +111,8 @@ impl SpriteRenderer {
 
         // Bind groups
         let sampler_bind_group = create_basic_sampler_bind_group(
-            &renderer,
+            &device,
+            &sampler,
             &sampler_bind_group_layout,
             &texture_atlas.texture,
             Some("sprite renderer sampler bind group"),
@@ -273,14 +267,10 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[2, 1, 0u16, 2, 3, 1];
 
-pub trait IntoSpriteInstance {
-    fn into_sprite_instance(&self) -> SpriteInstance;
-}
-
 pub(super) trait DrawSprite<'a> {
     fn draw_sprites_instanced(
         &mut self,
-        sprite_renderer: &'a SpriteRenderer,
+        sprite_renderer: &'a SpriteNode,
         camera: &'a Camera,
         instances: u32,
     );
@@ -292,7 +282,7 @@ where
 {
     fn draw_sprites_instanced(
         &mut self,
-        sprite_renderer: &'b SpriteRenderer,
+        sprite_renderer: &'b SpriteNode,
         camera: &'b Camera,
         instances: u32,
     ) {

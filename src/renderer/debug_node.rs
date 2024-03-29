@@ -5,11 +5,10 @@ use super::{
         create_basic_sampler_bind_group, create_basic_sampler_bind_group_layout,
         create_render_pipeline,
     },
-    texture::{self, Texture},
-    Renderer,
+    texture::{self},
 };
 
-pub struct DebugRenderer {
+pub struct DebugNode {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -17,7 +16,7 @@ pub struct DebugRenderer {
     texture_bind_group: Option<wgpu::BindGroup>,
 }
 
-impl DebugRenderer {
+impl DebugNode {
     pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
         let texture_bind_group_layout =
             create_basic_sampler_bind_group_layout(&device, Some("debug_bg layout"));
@@ -61,9 +60,15 @@ impl DebugRenderer {
         }
     }
 
-    pub fn set_bind_group(&mut self, renderer: &Renderer, texture: &texture::Texture) {
+    pub fn set_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        sampler: &wgpu::Sampler,
+        texture: &texture::Texture,
+    ) {
         let bind_group = create_basic_sampler_bind_group(
-            &renderer,
+            &device,
+            sampler,
             &self.texture_bind_group_layout,
             &texture,
             Some("debug bg"),
@@ -114,14 +119,14 @@ const VERTICES: &[Vertex] = &[
 const INDICES: &[u16] = &[2, 1, 0u16, 2, 3, 1];
 
 pub(super) trait DebugTexture<'a> {
-    fn draw_debug_texture(&mut self, debug_renderer: &'a DebugRenderer);
+    fn draw_debug_texture(&mut self, debug_renderer: &'a DebugNode);
 }
 
 impl<'a, 'b> DebugTexture<'b> for wgpu::RenderPass<'a>
 where
     'b: 'a,
 {
-    fn draw_debug_texture(&mut self, debug_renderer: &'b DebugRenderer) {
+    fn draw_debug_texture(&mut self, debug_renderer: &'b DebugNode) {
         if let Some(bind_group) = &debug_renderer.texture_bind_group {
             self.set_pipeline(&debug_renderer.pipeline);
             self.set_vertex_buffer(0, debug_renderer.vertex_buffer.slice(..));

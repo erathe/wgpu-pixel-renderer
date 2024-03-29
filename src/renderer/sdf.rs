@@ -2,21 +2,25 @@ use wgpu::util::DeviceExt;
 
 use super::{texture::Texture, Renderer};
 
-pub struct SDFPipeline<'a> {
+pub struct SDFPipeline {
     pipeline: wgpu::ComputePipeline,
-    pub texture_a: Texture,
-    pub texture_b: Texture,
-    final_texture: Option<&'a Texture>,
+    pub bind_group_a: wgpu::BindGroup,
+    pub bind_group_b: wgpu::BindGroup,
+    pub output_texture: Texture,
+    width: u32,
+    height: u32,
 }
 
-impl<'a> SDFPipeline<'a> {
+impl SDFPipeline {
     pub fn new(device: &wgpu::Device, seed_texture: Texture) -> Self {
+        let width = seed_texture.size.width;
+        let height = seed_texture.size.height;
         let texture_a = seed_texture;
 
         let texture_b = Texture::create_2d_texture(
             device,
-            texture_a.size.width,
-            texture_a.size.height,
+            width,
+            height,
             wgpu::TextureFormat::R32Float,
             wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::COPY_DST
@@ -46,21 +50,31 @@ impl<'a> SDFPipeline<'a> {
             entry_point: "main",
         });
 
+        let bind_group_a = Self::get_texture_bind_group(device, &texture_a, &texture_b);
+        let bind_group_b = Self::get_texture_bind_group(device, &texture_b, &texture_a);
+
+        let output_texture = {
+            if width.ilog2() % 2 == 0 {
+                texture_a
+            } else {
+                texture_b
+            }
+        };
+
         Self {
             pipeline,
-            texture_a,
-            texture_b,
-            final_texture: None,
+            bind_group_a,
+            bind_group_b,
+            output_texture,
+            width,
+            height,
         }
     }
 
-    pub fn compute_pass(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, x: u32, y: u32) {
-        let bind_group_a = Self::get_texture_bind_group(device, &self.texture_a, &self.texture_b);
-        let bind_group_b = Self::get_texture_bind_group(device, &self.texture_b, &self.texture_a);
-
-        let num_passes = x.ilog2();
+    pub fn compute_pass(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let num_passes = self.width.ilog2();
         let mut uniform = Params {
-            texture_size: [x, y],
+            texture_size: [self.width, self.height],
             jump_distance: 2_u32.pow(num_passes - 1),
             run: 0,
         };
@@ -75,9 +89,9 @@ impl<'a> SDFPipeline<'a> {
 
         for i in 0..num_passes {
             let bind_group = if i % 2 == 0 {
-                &bind_group_a
+                &self.bind_group_a
             } else {
-                &bind_group_b
+                &self.bind_group_b
             };
 
             uniform.jump_distance = 2_u32.pow(num_passes - i - 1);
@@ -94,7 +108,11 @@ impl<'a> SDFPipeline<'a> {
                 compute_pass.set_pipeline(&self.pipeline);
                 compute_pass.set_bind_group(0, &bind_group, &[]);
                 compute_pass.set_bind_group(1, &buffer_bind_group, &[]);
-                compute_pass.dispatch_workgroups((x + 15) / 16, (y + 15) / 16, 1);
+                compute_pass.dispatch_workgroups(
+                    (self.width + 15) / 16,
+                    (self.height + 15) / 16,
+                    1,
+                );
             }
 
             queue.submit(Some(encoder.finish()));
