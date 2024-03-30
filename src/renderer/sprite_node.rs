@@ -26,6 +26,7 @@ impl SpriteNode {
         config: &wgpu::SurfaceConfiguration,
         queue: &wgpu::Queue,
         sampler: &wgpu::Sampler,
+        sdf_texture: &Texture,
     ) -> anyhow::Result<Self> {
         // Texture atlas
         let texture_atlas = TextureAtlas::new("test_texture-sheet.png", device, &queue).await?;
@@ -55,7 +56,9 @@ impl SpriteNode {
             });
 
         let sampler_bind_group_layout =
-            &create_basic_sampler_bind_group_layout(device, Some("Sprite basic sampler bg layout"));
+            Self::get_bind_group_layout(device, Some("sprite sampler bg layout"));
+        // let sampler_bind_group_layout =
+        //     &create_basic_sampler_bind_group_layout(device, Some("Sprite basic sampler bg layout"));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Sprite renderer pipeline layout"),
             bind_group_layouts: &[
@@ -110,14 +113,22 @@ impl SpriteNode {
         });
 
         // Bind groups
-        let sampler_bind_group = create_basic_sampler_bind_group(
+        // let sampler_bind_group = create_basic_sampler_bind_group(
+        //     &device,
+        //     &sampler,
+        //     &sampler_bind_group_layout,
+        //     &texture_atlas.texture,
+        //     Some("sprite renderer sampler bind group"),
+        // );
+
+        let sampler_bind_group = Self::get_bind_group(
             &device,
             &sampler,
             &sampler_bind_group_layout,
             &texture_atlas.texture,
-            Some("sprite renderer sampler bind group"),
+            &sdf_texture,
+            Some("sprite bg"),
         );
-
         let texture_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sprite renderer texture atlas Bind Group"),
             layout: &texture_atlas_bind_group_layout,
@@ -135,6 +146,68 @@ impl SpriteNode {
             sampler_bind_group,
             texture_atlas_bind_group,
             texture,
+        })
+    }
+
+    fn get_bind_group_layout(device: &wgpu::Device, label: Option<&str>) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        })
+    }
+
+    fn get_bind_group(
+        device: &wgpu::Device,
+        sampler: &wgpu::Sampler,
+        layout: &wgpu::BindGroupLayout,
+        sprite_texture: &Texture,
+        sdf_texture: &Texture,
+        label: Option<&str>,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label,
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&sprite_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&sdf_texture.view),
+                },
+            ],
         })
     }
 

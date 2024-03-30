@@ -198,7 +198,9 @@ pub fn parse_map(map: &str) -> ParsedMap {
     let map_height = map_lines.len();
     let map_width = map_lines[0].len();
     let texture_width = map_width * TILE_SIZE;
+    println!("{texture_width}");
     let texture_height = map_height * TILE_SIZE;
+    println!("{texture_height}");
     let mut sdf_data = vec![0.0; texture_width * texture_height];
 
     for (y, line) in map_lines.iter().enumerate() {
