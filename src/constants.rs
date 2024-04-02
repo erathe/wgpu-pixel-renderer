@@ -206,7 +206,7 @@ pub fn parse_map(map: &str) -> ParsedMap {
     for (y, line) in map_lines.iter().enumerate() {
         for (x, char) in line.chars().enumerate() {
             let (tile, color) = match char {
-                '#' => (determine_wall_type(x, y, &map_lines), 0.1),
+                '#' => (determine_wall_type(x, y, &map_lines), 0.0),
                 _ => (_get_floor_tile(), f32::MAX),
             };
             tiles.insert((x, y), tile);

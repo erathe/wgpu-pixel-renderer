@@ -1,13 +1,7 @@
 use wgpu::{include_wgsl, util::DeviceExt};
 
 use super::{
-    camera::Camera,
-    pipeline_utils::{
-        create_basic_sampler_bind_group, create_basic_sampler_bind_group_layout,
-        create_render_pipeline,
-    },
-    texture_atlas::TextureAtlas,
-    Texture,
+    camera::Camera, pipeline_utils::create_render_pipeline, texture_atlas::TextureAtlas, Texture,
 };
 
 pub struct SpriteNode {
@@ -300,6 +294,8 @@ impl SpriteInstance {
     //     }
     // }
 }
+
+//TODO: Move this to somewhere general
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {

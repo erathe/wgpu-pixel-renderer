@@ -58,10 +58,18 @@ var sdf_texture: texture_2d<f32>;
 @group(1) @binding(0)
 var<uniform> atlas: TextureAtlasUniform;
 
+struct Light {
+	position: vec2<f32>,
+	color: vec3<f32>,
+	intensity: f32,
+	falloff: f32,
+};
+
 //TODO: uniform
 const screen = vec2(1920., 1200.);
-const light = vec2(480., 550.);
-const light_2 = vec2(1400., 550.);
+const light = Light (vec2(1000., 550.), vec3(1.0, 0.1, 0.1), 200., 0.4);
+const light2 = Light (vec2(1400., 550.), vec3(0.1, 0.8, 0.1), 200., 0.4);
+
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -70,19 +78,69 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	let uvOffset = in.tex_coords * sprite_size;
 	let localUv = uvOffset + (in.texture_origin / atlas.size);
 	
-	var sampled = textureSample(texture, texture_sampler, localUv);
+	var base_sample = textureSample(texture, texture_sampler, localUv);
 
 	// lighting
+	let w_p = in.world_position;
 	let world_uv = in.world_position / screen;
+	let ambient_light = vec3(0.05, 0.05, 0.05);
 
-	let d = distance(in.world_position, light) - 100.;
-	let color = 1. - step(0., d);
+	// make everything dark
+	var final_color = base_sample.rgb * ambient_light;
 
-	let d_2 = distance(in.world_position, light_2) - 100.;
-	let color_2 = 1. - step(0., d_2);
-	
+ 	let light_dir = normalize(light.position - w_p);
+	let dist = length(light.position - w_p);
+	var dist_traveled = 0.0;
+	var reached = true;
+
+	// raymarch sample lights
+	// can't hard core arrays in wgsl so just do it twice until I put stuff in uniforms
+	for (var j: i32 = 0; j < 100; j = j + 1) {
+		var p = light.position + (light_dir * dist_traveled);
+		let d = textureSample(sdf_texture, texture_sampler, (w_p + (dist_traveled * light_dir)) / screen).r;
+
+		if (d < 0.01) {
+			reached = false;
+			break;
+		}
+
+		dist_traveled += d;
+		if (dist_traveled >= dist) {
+			break;
+		};
+	}
+
+	if (reached) {
+		let falloff = light.intensity / (1.0 + (dist * dist * light.falloff));
+		final_color += light.color * falloff;
+	}
+
+ 	let light2_dir = normalize(light2.position - w_p);
+	let dist2 = length(light2.position - w_p);
+	var dist2_traveled = 0.0;
+	var reached2 = true;
 
 
-	let sdf_sample = textureSample(sdf_texture, texture_sampler, world_uv);
-	return sampled + (sdf_sample / 200.) + (color * 0.1) + (color_2 * 0.1);
+	for (var j: i32 = 0; j < 100; j = j + 1) {
+		var p = light2.position + (light2_dir * dist2_traveled);
+		let d = textureSample(sdf_texture, texture_sampler, (w_p + (dist2_traveled * light2_dir)) / screen).r;
+
+		if (d < 0.01) {
+			reached2 = false;
+			break;
+		}
+
+		dist2_traveled += d;
+		if (dist2_traveled >= dist2) {
+			break;
+		};
+	}
+
+	if (reached2) {
+		let falloff2 = light2.intensity / (1.0 + (dist2 * dist2 * light2.falloff));
+		final_color += light2.color * falloff2;
+	}
+	// let sdf_sample = textureSample(sdf_texture, texture_sampler, world_uv).r;
+
+	return vec4(final_color, base_sample.a);
 }
