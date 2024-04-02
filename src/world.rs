@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use instant::{Duration, Instant};
+use rand::Rng;
 use winit::{
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
@@ -9,7 +10,7 @@ use winit::{
 use crate::{
     constants::{parse_map, Position, Translation, Types, MAP, SPRITE_SIZE, TILES, TILE_SIZE},
     entity::Entity,
-    renderer::{Camera, Renderer, SpriteInstance},
+    renderer::{Camera, Light, Renderer, SpriteInstance},
     utils::Incrementor,
 };
 
@@ -27,6 +28,7 @@ pub struct World {
     camera: Camera,
     time: Instant,
     time_since_last_frame: Duration,
+    time_tot: Duration,
     frames: i32,
     acc_time: Duration,
     sprite_instances: Vec<SpriteInstance>,
@@ -35,12 +37,14 @@ pub struct World {
     pub entities: Vec<Entity>,
     input: Input,
     debug_texture: bool,
+    lights: Vec<Light>,
 }
 
 impl World {
     pub async fn new(window: Window) -> anyhow::Result<Self> {
         let time = Instant::now();
         let time_since_last_frame = Duration::from_millis(0);
+        let time_tot = Duration::from_millis(0);
         let acc_time = Duration::from_millis(0);
         let size = window.inner_size();
         let (map, occluder_data, width, height) = parse_map(MAP);
@@ -58,6 +62,78 @@ impl World {
         );
         let id_generator = Incrementor::new();
 
+        let lights = Vec::from([
+            Light {
+                position: [1200., 920.],
+                intensity: 3.,
+                falloff: 0.4,
+                color: [1., 1., 1.],
+                frequency: 2.,
+            },
+            Light {
+                position: [300., 900.],
+                intensity: 3.,
+                falloff: 0.2,
+                color: [0.7, 0.3, 0.1],
+                frequency: 7.,
+            },
+            Light {
+                position: [150., 500.],
+                intensity: 3.,
+                falloff: 0.2,
+                color: [0.4, 0.2, 0.8],
+                frequency: 10.,
+            },
+            Light {
+                position: [300., 200.],
+                intensity: 3.,
+                falloff: 0.4,
+                color: [0.3, 0.2, 0.8],
+                frequency: 1.,
+            },
+            Light {
+                position: [500., 550.],
+                intensity: 3.,
+                falloff: 0.4,
+                color: [0.98, 0.34, 0.13],
+                frequency: 7.,
+            },
+            Light {
+                position: [1000., 550.],
+                intensity: 3.,
+                falloff: 0.2,
+                color: [1., 0.5, 0.3],
+                frequency: 4.,
+            },
+            Light {
+                position: [1400., 550.],
+                intensity: 4.,
+                falloff: 0.4,
+                color: [0., 0.5, 0.3],
+                frequency: 3.,
+            },
+            Light {
+                position: [1800., 350.],
+                intensity: 2.,
+                falloff: 0.4,
+                color: [0.4, 0.8, 0.1],
+                frequency: 7.,
+            },
+            Light {
+                position: [1500., 150.],
+                intensity: 3.,
+                falloff: 0.4,
+                color: [0.7, 0.3, 0.1],
+                frequency: 1.,
+            },
+            Light {
+                position: [1800., 950.],
+                intensity: 3.,
+                falloff: 0.4,
+                color: [0.1, 1.0, 0.5],
+                frequency: 9.,
+            },
+        ]);
         Ok(Self {
             renderer,
             instance_map,
@@ -65,9 +141,11 @@ impl World {
             size,
             map,
             window,
+            lights,
             camera,
             frames: 0,
             time,
+            time_tot,
             time_since_last_frame,
             sprite_instances,
             acc_time,
@@ -114,6 +192,7 @@ impl World {
         let c_time = Instant::now();
         self.time_since_last_frame = c_time - self.time;
         self.time = c_time;
+        self.time_tot += self.time_since_last_frame;
 
         self.frames += 1;
         self.acc_time += self.time_since_last_frame;
@@ -133,6 +212,8 @@ impl World {
                 bytemuck::cast_slice(&[self.camera.get_uniform().uniform]),
             );
         };
+
+        self.move_lights();
 
         // let mut rng = rand::thread_rng();
         // let mut rng_y = rand::thread_rng();
@@ -155,6 +236,8 @@ impl World {
             &self.sprite_instances,
             // self.entities.len() as u64,
         );
+
+        self.renderer.draw_lights(&self.lights);
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -224,7 +307,7 @@ impl World {
     }
 
     pub(crate) fn initialize_map(&mut self) {
-        //TODO: clean up
+        //TODO: clean up and fix parsing
         let map = self.map.clone();
         for ((x, y), tile) in map {
             self.spawn_sprite(
@@ -238,6 +321,7 @@ impl World {
                 Types::ENVIRONMENT,
             )
         }
+        // TODO: This guy should also occlude
         self.spawn_sprite(
             &TILES.player_walk_down_1,
             Translation {
@@ -248,6 +332,17 @@ impl World {
             },
             Types::PLAYER,
         );
+    }
+
+    fn move_lights(&mut self) {
+        let acc_t = self.time_tot;
+        self.lights.iter_mut().for_each(|l| {
+            let new_x = 0.4 * (l.frequency * acc_t.as_secs_f32()).sin();
+            let new_y = 0.4 * (l.frequency * acc_t.as_secs_f32()).cos();
+            l.position[0] += new_x;
+            l.position[1] += new_y;
+            l.intensity += 0.3 * (acc_t.as_secs_f32() * l.frequency).sin();
+        });
     }
 
     fn move_player(&mut self) -> Option<(f32, f32)> {
@@ -277,11 +372,8 @@ impl World {
                     if id == 0 {
                         v = Some((instance.translation.x(), instance.translation.y()))
                     }
-                    // return Some((instance.translation.x(), instance.translation.y()));
                 }
             });
-        // if let Some(player) = self.entities.iter_mut().find(|e| e.kind == Types::PLAYER) {
-        //     }
 
         return v;
     }

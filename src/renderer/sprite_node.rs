@@ -1,7 +1,8 @@
 use wgpu::{include_wgsl, util::DeviceExt};
 
 use super::{
-    camera::Camera, pipeline_utils::create_render_pipeline, texture_atlas::TextureAtlas, Texture,
+    camera::Camera, light_node::LightNode, pipeline_utils::create_render_pipeline,
+    texture_atlas::TextureAtlas, Texture,
 };
 
 pub struct SpriteNode {
@@ -12,9 +13,11 @@ pub struct SpriteNode {
     sampler_bind_group: wgpu::BindGroup,
     texture_atlas_bind_group: wgpu::BindGroup,
     lights_bind_group: wgpu::BindGroup,
+    lights_buffer: wgpu::Buffer,
     pub texture: Texture,
 }
 
+// TODO: clean up the whole lights buffer stuff, pretty hacky right now
 impl SpriteNode {
     pub async fn new(
         device: &wgpu::Device,
@@ -123,84 +126,13 @@ impl SpriteNode {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        // TODO: Pull this out into world
-        let lights_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("lights buffer"),
-            contents: bytemuck::cast_slice(&[
-                Light {
-                    position: [1200., 920.],
-                    intensity: 20.,
-                    falloff: 0.4,
-                    color: [1., 1., 1.],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [300., 900.],
-                    intensity: 30.,
-                    falloff: 0.2,
-                    color: [0.7, 0.3, 0.1],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [150., 500.],
-                    intensity: 30.,
-                    falloff: 0.2,
-                    color: [0.4, 0.2, 0.8],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [300., 200.],
-                    intensity: 30.,
-                    falloff: 0.4,
-                    color: [0.3, 0.2, 0.8],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [500., 550.],
-                    intensity: 30.,
-                    falloff: 0.4,
-                    color: [0.98, 0.34, 0.13],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [1000., 550.],
-                    intensity: 30.,
-                    falloff: 0.2,
-                    color: [1., 0.5, 0.3],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [1400., 550.],
-                    intensity: 40.,
-                    falloff: 0.4,
-                    color: [0., 0.5, 0.3],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [1800., 350.],
-                    intensity: 40.,
-                    falloff: 0.4,
-                    color: [0.4, 0.8, 0.1],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [1500., 150.],
-                    intensity: 40.,
-                    falloff: 0.4,
-                    color: [0.7, 0.3, 0.1],
-                    _padding: 0.,
-                },
-                Light {
-                    position: [1800., 950.],
-                    intensity: 40.,
-                    falloff: 0.4,
-                    color: [0.1, 1.0, 0.5],
-                    _padding: 0.,
-                },
-            ]),
+        let lights_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Lights Buffer"),
+            size: 100 * std::mem::size_of::<Light>() as u64,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false,
         });
 
         // Bind groups
@@ -245,6 +177,7 @@ impl SpriteNode {
             sampler_bind_group,
             texture_atlas_bind_group,
             lights_bind_group,
+            lights_buffer,
             texture,
         })
     }
@@ -324,16 +257,21 @@ impl SpriteNode {
         //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         // });
     }
+
+    // TODO: This should be generalized
+    pub fn draw_lights(&mut self, lights: &[Light], queue: &wgpu::Queue) {
+        queue.write_buffer(&self.lights_buffer, 0, bytemuck::cast_slice(&lights));
+    }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Light {
-    position: [f32; 2],
-    intensity: f32,
-    falloff: f32,
-    color: [f32; 3],
-    _padding: f32,
+pub struct Light {
+    pub position: [f32; 2],
+    pub intensity: f32,
+    pub falloff: f32,
+    pub color: [f32; 3],
+    pub frequency: f32,
 }
 
 #[repr(C)]

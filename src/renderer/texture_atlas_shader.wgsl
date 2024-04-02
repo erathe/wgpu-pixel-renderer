@@ -1,3 +1,4 @@
+
 struct TextureAtlasUniform {
 	size: vec2<f32>,
 }
@@ -82,6 +83,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	var base_sample = textureSample(texture, texture_sampler, localUv);
 
 	// lighting
+	// TODO: Should probably be a post processing step
 	let w_p = in.world_position;
 
 	// where to sample the sdf
@@ -91,6 +93,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	let ambient_light = vec3(0.015, 0.015, 0.015);
 	var final_color = base_sample.rgb * ambient_light;
 
+	// TODO: add num lights as a uniform
 	for (var i: i32 = 0; i < 10; i = i + 1) {
 		let light = lights[i];
 
@@ -101,14 +104,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 		// soft shadows
 		var s = 1.0;
-		var k = 4.0;
+		var k = 12.0;
 
 		// raymarch sample lights
 		// can't hard core arrays in wgsl so just do it twice until I put stuff in uniforms
 		for (var j: i32 = 0; j < 100; j = j + 1) {
 			let d = textureSample(sdf_texture, texture_sampler, (w_p + (dist_traveled * light_dir)) / screen).r;
 
-			if (d < 0.01) {
+			if (d < 0.00001) {
 				reached = false;
 				break;
 			}
@@ -125,7 +128,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 			final_color += (base_sample.rgb * light.color) * falloff * s;
 		}
 	}	
-// let sdf_sample = textureSample(sdf_texture, texture_sampler, world_uv).r;
 
 	return vec4(final_color, base_sample.a);
 }

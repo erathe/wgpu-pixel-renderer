@@ -2,13 +2,9 @@ use bytemuck::NoUninit;
 use winit::window::Window;
 
 use super::{
-    camera::Camera,
-    debug_node::DebugTexture,
-    light_node::{DrawIlluminatedScene, LightNode},
-    output_node::DrawToScreen,
-    sprite_node::DrawSprite,
-    utils::to_linear_rgb,
-    DebugNode, OutputNode, SDFPipeline, SpriteInstance, SpriteNode, Texture,
+    camera::Camera, debug_node::DebugTexture, output_node::DrawToScreen, sprite_node::DrawSprite,
+    utils::to_linear_rgb, DebugNode, Light, OutputNode, SDFPipeline, SpriteInstance, SpriteNode,
+    Texture,
 };
 
 pub struct Renderer {
@@ -20,12 +16,7 @@ pub struct Renderer {
     sprite_node: SpriteNode,
     sdf_node: SDFPipeline,
     output_node: OutputNode,
-    // light_node: LightNode,
     debug_node: DebugNode,
-    // sprite node
-    // sdf node
-    // lighting node
-    // output node
 }
 
 impl Renderer {
@@ -108,15 +99,6 @@ impl Renderer {
             SpriteNode::new(&device, &config, &queue, &sampler, &sdf_node.output_texture).await?;
         let mut debug_node = DebugNode::new(&device, &config);
         debug_node.set_bind_group(&device, &sampler, &sdf_node.output_texture);
-
-        // This did not work as intended, can remove
-        // let light_node = LightNode::new(
-        //     &device,
-        //     &config,
-        //     &sampler,
-        //     &sprite_node.texture,
-        //     &sdf_node.output_texture,
-        // );
         let output_node = OutputNode::new(&device, &config, &sampler, &sprite_node.texture);
 
         Ok(Self {
@@ -127,7 +109,6 @@ impl Renderer {
             sampler,
             sprite_node,
             sdf_node,
-            // light_node,
             output_node,
             debug_node,
         })
@@ -146,10 +127,16 @@ impl Renderer {
         }
     }
 
+    // TODO: This should be generalized
     pub fn draw_sprites(&mut self, sprites: &[SpriteInstance]) {
         self.sprite_node.draw_sprites(sprites, &self.queue);
     }
 
+    pub fn draw_lights(&mut self, lights: &[Light]) {
+        self.sprite_node.draw_lights(lights, &self.queue);
+    }
+
+    // TODO: Setup a render graph that processes nodes in a smoother way
     pub fn render(
         &mut self,
         camera: &Camera,
@@ -158,12 +145,13 @@ impl Renderer {
     ) -> Result<(), wgpu::SurfaceError> {
         self.sdf_node.compute_pass(&self.device, &self.queue);
         self.render_sprites_to_texture(camera, instances)?;
-        // self.render_illuminated_scene(camera)?;
         self.render_to_screen(show_debug_texture)?;
 
         Ok(())
     }
 
+    // TODO: This should just be handled inside the sprite node. Don't really need the trait
+    // etc.
     pub fn render_sprites_to_texture(
         &mut self,
         camera: &Camera,
@@ -204,43 +192,6 @@ impl Renderer {
 
         Ok(())
     }
-
-    // pub fn render_illuminated_scene(&mut self, camera: &Camera) -> Result<(), wgpu::SurfaceError> {
-    //     let view = &self.light_node.output_texture.view;
-
-    //     let mut encoder = self
-    //         .device
-    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-    //             label: Some("Render Encoder"),
-    //         });
-    //     let clear_color = to_linear_rgb(0x0F0F26);
-    //     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-    //         label: Some("Base::pass"),
-    //         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-    //             view: &view,
-    //             resolve_target: None,
-    //             ops: wgpu::Operations {
-    //                 load: wgpu::LoadOp::Clear(wgpu::Color {
-    //                     r: clear_color[0] as f64,
-    //                     g: clear_color[1] as f64,
-    //                     b: clear_color[2] as f64,
-    //                     a: 1.0,
-    //                 }),
-    //                 store: wgpu::StoreOp::Store,
-    //             },
-    //         })],
-    //         depth_stencil_attachment: None,
-    //         timestamp_writes: None,
-    //         occlusion_query_set: None,
-    //     });
-
-    //     pass.draw_illuminated_scene(&self.light_node, camera);
-    //     drop(pass);
-
-    //     self.queue.submit(Some(encoder.finish()));
-
-    //     Ok(())
-    // }
 
     pub fn render_to_screen(&mut self, show_debug_texture: bool) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;

@@ -16,5 +16,5 @@ pub use debug_node::DebugNode;
 pub use output_node::OutputNode;
 pub use renderer::Renderer;
 pub use sdf::SDFPipeline;
-pub use sprite_node::{SpriteInstance, SpriteNode};
+pub use sprite_node::{Light, SpriteInstance, SpriteNode};
 pub use texture::Texture;
