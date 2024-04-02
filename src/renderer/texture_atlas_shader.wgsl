@@ -67,8 +67,8 @@ struct Light {
 
 //TODO: uniform
 const screen = vec2(1920., 1200.);
-const light = Light (vec2(1000., 550.), vec3(1.0, 0.1, 0.1), 200., 0.4);
-const light2 = Light (vec2(1400., 550.), vec3(0.1, 0.8, 0.1), 200., 0.4);
+const light = Light (vec2(1000., 550.), vec3(1.0, 0.1, 0.1), 1000., 0.04);
+const light2 = Light (vec2(1400., 550.), vec3(0.1, 0.8, 0.1), 1000., 0.1);
 
 
 @fragment
@@ -82,8 +82,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	// lighting
 	let w_p = in.world_position;
-	let world_uv = in.world_position / screen;
-	let ambient_light = vec3(0.05, 0.05, 0.05);
+	let world_uv = w_p / screen;
+	let ambient_light = vec3(0.03, 0.03, 0.03);
 
 	// make everything dark
 	var final_color = base_sample.rgb * ambient_light;
@@ -96,7 +96,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	// raymarch sample lights
 	// can't hard core arrays in wgsl so just do it twice until I put stuff in uniforms
 	for (var j: i32 = 0; j < 100; j = j + 1) {
-		var p = light.position + (light_dir * dist_traveled);
 		let d = textureSample(sdf_texture, texture_sampler, (w_p + (dist_traveled * light_dir)) / screen).r;
 
 		if (d < 0.01) {
@@ -112,7 +111,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	if (reached) {
 		let falloff = light.intensity / (1.0 + (dist * dist * light.falloff));
-		final_color += light.color * falloff;
+		final_color += (base_sample.rgb * light.color) * falloff;
 	}
 
  	let light2_dir = normalize(light2.position - w_p);
@@ -138,7 +137,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	if (reached2) {
 		let falloff2 = light2.intensity / (1.0 + (dist2 * dist2 * light2.falloff));
-		final_color += light2.color * falloff2;
+		final_color += (base_sample.rgb * light2.color) * falloff2;
 	}
 	// let sdf_sample = textureSample(sdf_texture, texture_sampler, world_uv).r;
 
