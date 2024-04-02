@@ -11,6 +11,7 @@ pub struct SpriteNode {
     instance_buffer: wgpu::Buffer,
     sampler_bind_group: wgpu::BindGroup,
     texture_atlas_bind_group: wgpu::BindGroup,
+    lights_bind_group: wgpu::BindGroup,
     pub texture: Texture,
 }
 
@@ -49,6 +50,21 @@ impl SpriteNode {
                 }],
             });
 
+        let lights_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("lights bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let sampler_bind_group_layout =
             Self::get_bind_group_layout(device, Some("sprite sampler bg layout"));
         // let sampler_bind_group_layout =
@@ -59,6 +75,7 @@ impl SpriteNode {
                 &sampler_bind_group_layout,
                 &texture_atlas_bind_group_layout,
                 &Camera::create_bind_group_layout(device),
+                &lights_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -106,6 +123,86 @@ impl SpriteNode {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        // TODO: Pull this out into world
+        let lights_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("lights buffer"),
+            contents: bytemuck::cast_slice(&[
+                Light {
+                    position: [1200., 920.],
+                    intensity: 20.,
+                    falloff: 0.4,
+                    color: [1., 1., 1.],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [300., 900.],
+                    intensity: 30.,
+                    falloff: 0.2,
+                    color: [0.7, 0.3, 0.1],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [150., 500.],
+                    intensity: 30.,
+                    falloff: 0.2,
+                    color: [0.4, 0.2, 0.8],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [300., 200.],
+                    intensity: 30.,
+                    falloff: 0.4,
+                    color: [0.3, 0.2, 0.8],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [500., 550.],
+                    intensity: 30.,
+                    falloff: 0.4,
+                    color: [0.98, 0.34, 0.13],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [1000., 550.],
+                    intensity: 30.,
+                    falloff: 0.2,
+                    color: [1., 0.5, 0.3],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [1400., 550.],
+                    intensity: 40.,
+                    falloff: 0.4,
+                    color: [0., 0.5, 0.3],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [1800., 350.],
+                    intensity: 40.,
+                    falloff: 0.4,
+                    color: [0.4, 0.8, 0.1],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [1500., 150.],
+                    intensity: 40.,
+                    falloff: 0.4,
+                    color: [0.7, 0.3, 0.1],
+                    _padding: 0.,
+                },
+                Light {
+                    position: [1800., 950.],
+                    intensity: 40.,
+                    falloff: 0.4,
+                    color: [0.1, 1.0, 0.5],
+                    _padding: 0.,
+                },
+            ]),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::UNIFORM,
+        });
+
         // Bind groups
         // let sampler_bind_group = create_basic_sampler_bind_group(
         //     &device,
@@ -123,6 +220,14 @@ impl SpriteNode {
             &sdf_texture,
             Some("sprite bg"),
         );
+        let lights_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("lights bind group"),
+            layout: &lights_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: lights_buffer.as_entire_binding(),
+            }],
+        });
         let texture_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sprite renderer texture atlas Bind Group"),
             layout: &texture_atlas_bind_group_layout,
@@ -139,6 +244,7 @@ impl SpriteNode {
             instance_buffer,
             sampler_bind_group,
             texture_atlas_bind_group,
+            lights_bind_group,
             texture,
         })
     }
@@ -218,6 +324,16 @@ impl SpriteNode {
         //     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         // });
     }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Light {
+    position: [f32; 2],
+    intensity: f32,
+    falloff: f32,
+    color: [f32; 3],
+    _padding: f32,
 }
 
 #[repr(C)]
@@ -365,6 +481,7 @@ where
         self.set_bind_group(0, &sprite_renderer.sampler_bind_group, &[]);
         self.set_bind_group(1, &sprite_renderer.texture_atlas_bind_group, &[]);
         self.set_bind_group(2, &camera.bind_group(), &[]);
+        self.set_bind_group(3, &sprite_renderer.lights_bind_group, &[]);
         self.draw_indexed(0..INDICES.len() as u32, 0, 0..instances)
     }
 }

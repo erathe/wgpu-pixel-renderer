@@ -206,7 +206,11 @@ pub fn parse_map(map: &str) -> ParsedMap {
     for (y, line) in map_lines.iter().enumerate() {
         for (x, char) in line.chars().enumerate() {
             let (tile, color) = match char {
-                '#' => (determine_wall_type(x, y, &map_lines), 0.0),
+                '#' => {
+                    let (wall_type, _occlude) = determine_wall_type(x, y, &map_lines);
+                    (wall_type, 0.0)
+                    // (wall_type, if occlude { 0.0 } else { f32::MAX })
+                }
                 _ => (_get_floor_tile(), f32::MAX),
             };
             tiles.insert((x, y), tile);
@@ -224,7 +228,7 @@ pub fn parse_map(map: &str) -> ParsedMap {
     (tiles, sdf_data, texture_width as u32, texture_height as u32)
 }
 
-fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
+fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> (Position, bool) {
     let y_max = map_lines.len() - 1;
     let x_max = map_lines[y].len() - 1;
     let two_below_is = if y > 1 {
@@ -307,7 +311,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#') | None,
             Some('#') | None,
             Some('#') | None,
-        ) => TILES.wall_ceil,
+        ) => (TILES.wall_ceil, true),
         (
             Some('#') | None,
             Some('#') | None,
@@ -320,7 +324,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#') | None,
             Some('.'),
             Some('#') | None,
-        ) => TILES.wall_bottom_cross_edge_right,
+        ) => (TILES.wall_bottom_cross_edge_right, true),
         (
             Some('#') | None,
             Some('#') | None,
@@ -333,7 +337,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#') | None,
             Some('#') | None,
             Some('.'),
-        ) => TILES.wall_bottom_cross_edge_left,
+        ) => (TILES.wall_bottom_cross_edge_left, false),
         (
             Some('#'),
             Some('#') | None,
@@ -345,7 +349,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#') | None,
             Some('#') | None,
             ..,
-        ) => TILES.wall_top_cross_edge_right,
+        ) => (TILES.wall_top_cross_edge_right, true),
         (
             Some('#'),
             Some('#') | None,
@@ -357,7 +361,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#') | None,
             Some('#') | None,
             ..,
-        ) => TILES.wall_top_cross_edge_left,
+        ) => (TILES.wall_top_cross_edge_left, true),
         (
             Some('#'),
             Some('#'),
@@ -369,7 +373,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('.'),
             Some('#'),
             ..,
-        ) => TILES.wall_right,
+        ) => (TILES.wall_right, true),
         (
             Some('#'),
             Some('#'),
@@ -381,7 +385,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#'),
             Some('.'),
             ..,
-        ) => TILES.wall_left,
+        ) => (TILES.wall_left, true),
         (
             Some('#'),
             Some('#'),
@@ -394,7 +398,7 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('.'),
             Some('.'),
             Some('.'),
-        ) => TILES.wall_bottom_edge_left_top,
+        ) => (TILES.wall_bottom_edge_left_top, false),
         (
             Some('#'),
             Some('#'),
@@ -407,25 +411,35 @@ fn determine_wall_type(x: usize, y: usize, map_lines: &Vec<&str>) -> Position {
             Some('#'),
             Some('.'),
             Some('.'),
-        ) => TILES.wall_bottom_edge_right_top,
+        ) => (TILES.wall_bottom_edge_right_top, true),
         (Some('#'), Some('#'), Some('#'), Some('.'), Some('.'), ..) => {
-            TILES.wall_bottom_edge_left_top
+            (TILES.wall_bottom_edge_left_top, true)
         }
-        (Some('#'), Some('#'), Some('.'), Some('#'), Some('#'), ..) => TILES.wall_right,
-        (Some('#'), Some('#'), Some('#'), Some('.'), Some('#'), ..) => TILES.wall_left,
-        (Some('.'), Some('#'), Some('#'), Some('.'), Some('#'), ..) => TILES.wall_top_edge_left,
-        (Some('.'), Some('#'), Some('.'), Some('#'), Some('#'), ..) => TILES.wall_top_edge_right,
-        (Some('#'), Some('.'), Some('#'), Some('.'), ..) => TILES.wall_bottom_edge_left_bottom,
-        (Some('#'), Some('#'), Some('.'), Some('#'), ..) => TILES.wall_bottom_edge_right_top,
-        (Some('#'), Some('.'), Some('.'), Some('#'), ..) => TILES.wall_bottom_edge_right_bottom,
-        (Some('#'), Some('.'), Some('#'), Some('#'), ..) => TILES.wall_bottom_mid_bottom,
+        (Some('#'), Some('#'), Some('.'), Some('#'), Some('#'), ..) => (TILES.wall_right, true),
+        (Some('#'), Some('#'), Some('#'), Some('.'), Some('#'), ..) => (TILES.wall_left, true),
+        (Some('.'), Some('#'), Some('#'), Some('.'), Some('#'), ..) => {
+            (TILES.wall_top_edge_left, true)
+        }
+        (Some('.'), Some('#'), Some('.'), Some('#'), Some('#'), ..) => {
+            (TILES.wall_top_edge_right, true)
+        }
+        (Some('#'), Some('.'), Some('#'), Some('.'), ..) => {
+            (TILES.wall_bottom_edge_left_bottom, false)
+        }
+        (Some('#'), Some('#'), Some('.'), Some('#'), ..) => {
+            (TILES.wall_bottom_edge_right_top, false)
+        }
+        (Some('#'), Some('.'), Some('.'), Some('#'), ..) => {
+            (TILES.wall_bottom_edge_right_bottom, false)
+        }
+        (Some('#'), Some('.'), Some('#'), Some('#'), ..) => (TILES.wall_bottom_mid_bottom, false),
         (Some('.'), Some('#') | None, Some('#'), Some('#'), Some('#') | None, ..) => {
-            TILES.wall_top_mid
+            (TILES.wall_top_mid, true)
         }
-        (_, Some('#'), Some('#'), Some('#'), ..) => TILES.wall_bottom_mid_top,
-        (Some('#') | None, Some('#'), Some('.') | Some('#'), ..) => TILES.wall_right,
-        (Some('#') | None, Some('#'), _, Some('.') | Some('#'), ..) => TILES.wall_left,
-        _ => TILES.player_walk_down_4,
+        (_, Some('#'), Some('#'), Some('#'), ..) => (TILES.wall_bottom_mid_top, false),
+        (Some('#') | None, Some('#'), Some('.') | Some('#'), ..) => (TILES.wall_right, true),
+        (Some('#') | None, Some('#'), _, Some('.') | Some('#'), ..) => (TILES.wall_left, true),
+        _ => (TILES.player_walk_down_4, true),
     }
 }
 
