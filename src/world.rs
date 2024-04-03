@@ -75,14 +75,14 @@ impl World {
                 intensity: 3.,
                 falloff: 0.2,
                 color: [0.7, 0.3, 0.1],
-                frequency: 7.,
+                frequency: 2.5,
             },
             Light {
                 position: [150., 500.],
                 intensity: 3.,
                 falloff: 0.2,
                 color: [0.4, 0.2, 0.8],
-                frequency: 10.,
+                frequency: 4.,
             },
             Light {
                 position: [300., 200.],
@@ -93,22 +93,22 @@ impl World {
             },
             Light {
                 position: [500., 550.],
-                intensity: 3.,
-                falloff: 0.4,
+                intensity: 6.,
+                falloff: 0.2,
                 color: [0.98, 0.34, 0.13],
-                frequency: 7.,
+                frequency: 2.,
             },
             Light {
                 position: [1000., 550.],
-                intensity: 3.,
+                intensity: 0.,
                 falloff: 0.2,
                 color: [1., 0.5, 0.3],
-                frequency: 4.,
+                frequency: 0.,
             },
             Light {
                 position: [1400., 550.],
-                intensity: 4.,
-                falloff: 0.4,
+                intensity: 8.,
+                falloff: 0.2,
                 color: [0., 0.5, 0.3],
                 frequency: 3.,
             },
@@ -131,7 +131,7 @@ impl World {
                 intensity: 3.,
                 falloff: 0.4,
                 color: [0.1, 1.0, 0.5],
-                frequency: 9.,
+                frequency: 5.,
             },
         ]);
         Ok(Self {
@@ -341,7 +341,7 @@ impl World {
             let new_y = 0.4 * (l.frequency * acc_t.as_secs_f32()).cos();
             l.position[0] += new_x;
             l.position[1] += new_y;
-            l.intensity += 0.3 * (acc_t.as_secs_f32() * l.frequency).sin();
+            l.intensity += 0.1 * (acc_t.as_secs_f32() * l.frequency).sin();
         });
     }
 

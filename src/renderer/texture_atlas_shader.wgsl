@@ -86,7 +86,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 	// TODO: Should probably be a post processing step
 	let w_p = in.world_position;
 
-	// where to sample the sdf
+	// where to sample the sdf (world space)
 	let world_uv = w_p / screen;
 
 	// make everything dark
@@ -106,25 +106,35 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 		var s = 1.0;
 		var k = 12.0;
 
-		// raymarch sample lights
-		// can't hard core arrays in wgsl so just do it twice until I put stuff in uniforms
+		// Raymarch a light.
 		for (var j: i32 = 0; j < 100; j = j + 1) {
+			// march from fragment to wards light. sample sdf to determine step distance
 			let d = textureSample(sdf_texture, texture_sampler, (w_p + (dist_traveled * light_dir)) / screen).r;
 
+			// hit a wall
 			if (d < 0.00001) {
 				reached = false;
 				break;
 			}
 
 			dist_traveled += d;
+
+			// calculate soft shadows
 			s = min(s, (k * d) / dist_traveled);
+
+			// overshot the light source
 			if (dist_traveled >= dist) {
 				break;
 			};
 		}
 
 		if (reached) {
-			let falloff = (light.intensity * 100.) / (1.0 + (dist * dist * light.falloff));
+			// The constant part of the denominator diffuses the glow close to the light
+			// should add to uniform
+			let falloff = (light.intensity * 100.) / (40. + (dist * dist * light.falloff));
+
+			// Multiply in the base color to make sure we actually "light up" a tile instead
+			// of just diffusing the color
 			final_color += (base_sample.rgb * light.color) * falloff * s;
 		}
 	}	
