@@ -1,6 +1,5 @@
 mod camera;
 mod debug_node;
-mod light_node;
 mod output_node;
 mod pipeline_utils;
 mod renderer;

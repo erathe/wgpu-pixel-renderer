@@ -1,8 +1,7 @@
 use wgpu::{include_wgsl, util::DeviceExt};
 
 use super::{
-    camera::Camera, light_node::LightNode, pipeline_utils::create_render_pipeline,
-    texture_atlas::TextureAtlas, Texture,
+    camera::Camera, pipeline_utils::create_render_pipeline, texture_atlas::TextureAtlas, Texture,
 };
 
 pub struct SpriteNode {
